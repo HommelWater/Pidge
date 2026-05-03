@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widgets=resizes-content">
+	<link rel="icon" href="/interface/auth/icon.jpg" type="image/png">
+  <link rel="stylesheet" href="/interface/auth/style.css">
+  <script src="/interface/shared/persistent.js"></script>
+  <script src="/interface/shared/functions.js"></script>
+  <script src="/interface/main/app.js"></script>
+</head>
+<body>
+    <p id="session_key"></p>
+    <p id="server_data" style="text-align: left;"></p>
+    <div class="section">
+      <h3>Messages</h3>
+      <div id="messages"></div>
+      <div class="message-input-area">
+        <input type="text" id="messageInput" placeholder="Type your message..." />
+        <button onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Upload File</h3>
+      <input type="file" id="fileInput">
+      <label><input type="checkbox" id="isPublic"> Public</label><br><br>
+      <button onclick="handleUpload()">Upload</button>
+    </div>
+    <div class="section">
+      <h3>My Files</h3>
+      <button onclick="loadFiles()">Refresh List</button>
+      <div id="fileList"></div>
+    </div>
+  </body>
+</html>
