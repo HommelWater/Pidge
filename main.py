@@ -13,7 +13,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-app.mount("/site/", StaticFiles(directory="./interface/"), name="interface")
+app.mount("/site/", StaticFiles(directory="./site/"), name="site")
 
 @app.get("/{full_path:path}")
 async def spa(full_path: str):
