@@ -392,7 +392,7 @@
           <div class="post-header">
             <span class="post-author" data-author="${post.author}">${escapeHtml(profile.displayName || post.author.slice(0,8))}</span>
             <span class="post-handle">@${post.author.slice(0,8)}</span>
-            <span class="post-time">· ${timeAgo(post.timestamp)}</span>
+            <span class="post-time"> · ${timeAgo(post.timestamp)}</span>
           </div>
           <div class="post-text">${escapeHtml(post.content)}</div>
           ${post.imageUrl ? `<img class="post-image" src="${escapeHtml(post.imageUrl)}" alt="Post image" onerror="this.style.display='none'">` : ''}
