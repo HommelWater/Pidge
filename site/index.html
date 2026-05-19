@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pidge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widgets=resizes-content">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <main id="feed-area">
+    <div id="feed-header">Home</div>
+
+    <div id="post-composer">
+      <div class="composer-avatar" id="composer-avatar"></div>
+      <div class="composer-body">
+        <textarea id="post-text" placeholder="What is happening?!" maxlength="280"></textarea>
+        <input type="text" id="post-image-url" placeholder="Image URL (optional)">
+        <div class="composer-actions">
+          <div class="composer-tools">
+            <span id="char-count">0/280</span>
+          </div>
+          <button id="post-button">Post</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="feed-content"></div>
+  </main>
+</div>
+
+<button id="settings-button" title="Settings">⚙️</button>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal">
+  <div class="modal-content">
+    <button class="close-modal" data-modal="settings-modal">&times;</button>
+    <h2>Settings</h2>
+    <div style="margin-bottom:1rem;">
+      <strong>Your Pidge ID:</strong><br>
+      <code id="modal-user-id" style="word-break: break-all;"></code>
+      <button id="copy-id">📋 Copy</button>
+    </div>
+    <div style="margin:1rem 0;">
+        <strong>Your Invite Link:</strong><br>
+        <input type="text" id="share-link" readonly style="width:100%; margin-top:0.5rem; padding:0.5rem;">
+        <button id="copy-link" style="margin-top:0.5rem;">📋 Copy Link</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Your Profile</h3>
+    <div class="profile-form">
+      <input type="text" id="profile-name" placeholder="Display Name">
+      <input type="text" id="profile-avatar" placeholder="Avatar Image URL">
+      <textarea id="profile-bio" placeholder="Bio" maxlength="160" style="height:60px; resize:none;"></textarea>
+      <button id="save-profile">Save Profile</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Add Friend</h3>
+    <div class="add-friend-row">
+      <input type="text" id="new-friend-id" placeholder="Friend's Pidge ID">
+      <button id="add-friend-btn">Add</button>
+    </div>
+    <h3>Your Friends</h3>
+    <ul id="friend-list"></ul>
+  </div>
+</div>
+
+<!-- Profile Modal -->
+<div id="profile-modal" class="modal">
+  <div class="modal-content wide">
+    <button class="close-modal" data-modal="profile-modal">&times;</button>
+    <div id="profile-view">
+      <div id="profile-view-avatar" class="profile-avatar-large"></div>
+      <h2 id="profile-view-name"></h2>
+      <code id="profile-view-id"></code>
+      <p id="profile-view-bio" style="margin-top:0.5rem;"></p>
+      <hr style="margin:1rem 0;">
+      <h3>Posts</h3>
+      <div id="profile-view-posts"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
