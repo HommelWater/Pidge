@@ -93,7 +93,25 @@
   document.getElementById('profile-bio').value = myProfile.bio || '';
 
   // ---------- Trystero Room ----------
-  const room = joinRoom({ appId: 'pidge-v2', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'] }, 'pidge-global');
+  const iceServers = [
+      { urls: 'stun:openrelay.metered.ca:80' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+  ];
+  const room = joinRoom({ appId: 'pidge-v2', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: { iceServers }, }, 'pidge-global');
 
   const peerMap = new Map();
   const peerToUserId = new Map();
