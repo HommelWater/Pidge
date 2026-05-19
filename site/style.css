@@ -259,8 +259,13 @@ button:hover {
     background: var(--color-button-h); 
 }
 
-#save-profile, #add-friend-btn, #copy-id { 
+#save-profile, #add-friend-btn, #copy-id, #copy-link { 
     padding: 0.4rem 0.8rem; 
+
+}
+
+#copy-id, #copy-link, #save-profile {
+    width:100%;
 }
 
 #profile-view-posts { 
