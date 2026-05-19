@@ -94,23 +94,30 @@
 
   // ---------- Trystero Room ----------
   const iceServers = [
-      { urls: 'stun:openrelay.metered.ca:80' },
       {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
+        urls: "stun:stun.relay.metered.ca:80",
       },
       {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
+        urls: "turn:global.relay.metered.ca:80",
+        username: "b93e531ccf3bc10247719c15",
+        credential: "Q7k84R5DmVFvQ7Nq",
       },
       {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-  ];
+        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+        username: "b93e531ccf3bc10247719c15",
+        credential: "Q7k84R5DmVFvQ7Nq",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "b93e531ccf3bc10247719c15",
+        credential: "Q7k84R5DmVFvQ7Nq",
+      },
+      {
+        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+        username: "b93e531ccf3bc10247719c15",
+        credential: "Q7k84R5DmVFvQ7Nq",
+      },
+  ]
   const room = joinRoom({ appId: 'pidge-v2', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: { iceServers }, }, 'pidge-global');
 
   const peerMap = new Map();
