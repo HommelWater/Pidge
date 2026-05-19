@@ -201,8 +201,14 @@ body {
 }
 .modal.active { display: flex; }
 .modal-content {
-  background: var(--color-card); border: 1px solid var(--color-border); padding: 2rem;
-  width: 90%; max-width: 500px; position: relative; max-height: 90vh; overflow-y: auto;
+  background: var(--color-card); 
+  border: 1px solid var(--color-border); 
+  padding: 5px;
+  width: 90%; 
+  max-width: 500px; 
+  position: relative; 
+  max-height: 90vh; 
+  overflow-y: auto;
 }
 .modal-content.wide { max-width: 700px; }
 .close-modal {
@@ -217,8 +223,15 @@ body {
 .online-dot { width: 10px; height: 10px; background: #4CAF50; display: inline-block; margin-left: 0.5rem; border: 1px solid var(--color-border); }
 .offline-dot { background: #ccc; }
 .profile-form { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
-.add-friend-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.add-friend-row input { flex: 1; padding: 0.5rem; }
+.add-friend-row { 
+    display: flex; 
+    gap: 0.5rem; 
+    margin-bottom: 1rem; 
+}
+.add-friend-row input { 
+    flex: 1; 
+    padding: 0.5rem; 
+}
 
 .profile-avatar-large {
   width: 80px; 
