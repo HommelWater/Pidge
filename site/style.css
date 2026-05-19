@@ -5,14 +5,14 @@
 }
 
 :root {
-	--color-background: #CADCAE;
-	--color-card: #E1E9C9;
-	--color-button: #EDA35A;
-	--color-button-h: #FEE8D9;
-	--color-text:black;
-	--color-items: var(--color-background);
-	--color-border: #2222;
-	--color-link: #f58d27
+  --color-background: #B8C4D0;   /* Soft gray-blue breast feathers */
+  --color-card: #E8EDF2;         /* Pale blue-white underparts */
+  --color-button: #EDA35A;       /* Pigeon eye orange */
+  --color-button-h: #FEE8D9;     /* Warm peach hover */
+  --color-text: #22262B;         /* Near-black wing bars */
+  --color-items: #C0CBD5;        /* Light slate */
+  --color-border: #8899AA30;     /* Blue-gray border */
+  --color-link: #7B6B8D;         /* Iridescent neck purple */
 }
 
 body {
