@@ -72,10 +72,16 @@
   <div class="modal-content wide">
     <button class="close-modal" data-modal="profile-modal">&times;</button>
     <div id="profile-view">
-      <div id="profile-view-avatar" class="profile-avatar-large"></div>
-      <h2 id="profile-view-name"></h2>
-      <code id="profile-view-id"></code>
-      <p id="profile-view-bio" style="margin-top:0.5rem;"></p>
+      <div id="profile-info-container" style="display:flex">
+        <div id="profile-view-avatar" class="profile-avatar-large"></div>
+        <div id="profile-info">
+          <h2 id="profile-view-name"></h2>
+          <code id="profile-view-id"></code>
+          <p id="profile-view-bio" style="margin-top:0.5rem;"></p>
+
+        </div>
+
+      </div>
       <hr style="margin:1rem 0;">
       <h3>Posts</h3>
       <div id="profile-view-posts"></div>
