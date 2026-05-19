@@ -102,7 +102,7 @@ After=network.target
 
 [Service]
 User=$(whoami)
-WorkingDirectory=${PROJECT_ROOT}/src
+WorkingDirectory=${PROJECT_ROOT}
 EnvironmentFile=${ENV_FILE}
 ExecStart=${VENV_DIR}/bin/uvicorn main:app --host 127.0.0.1 --port ${APP_PORT} --proxy-headers
 Restart=always
