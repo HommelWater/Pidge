@@ -139,8 +139,8 @@ const peerStreams = new Map(); // peerId -> MediaStream
 const pendingStreamStarts = new Map(); // peerId -> { payload, sig }
 
 // ---------- NEW: Mesh relay state ----------
-const MAX_DIRECT_PEERS = 3;   // Original streamer direct feeds
-const MAX_RELAY_PEERS = 2;    // Each viewer forwards to at most this many peers
+const MAX_DIRECT_PEERS = 10;   // Original streamer direct feeds
+const MAX_RELAY_PEERS = 5;    // Each viewer forwards to at most this many peers
 
 const myRelayedStreams = new Map();   // streamerId -> MediaStream I hold and can forward
 const streamSources = new Map();      // streamerId -> peerId I received it from
