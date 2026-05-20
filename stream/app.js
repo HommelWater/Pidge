@@ -85,12 +85,30 @@ document.getElementById('profile-bio').value = myProfile.bio || '';
 
 // ---------- Trystero Room ----------
 const iceServers = [
-    { urls: "stun:stun.relay.metered.ca:80" },
-    { urls: "turn:global.relay.metered.ca:80", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
-    { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
-    { urls: "turn:global.relay.metered.ca:443", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
-    { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
-];
+    {
+    urls: "stun:stun.relay.metered.ca:80",
+    },
+    {
+    urls: "turn:global.relay.metered.ca:80",
+    username: "b93e531ccf3bc10247719c15",
+    credential: "Q7k84R5DmVFvQ7Nq",
+    },
+    {
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "b93e531ccf3bc10247719c15",
+    credential: "Q7k84R5DmVFvQ7Nq",
+    },
+    {
+    urls: "turn:global.relay.metered.ca:443",
+    username: "b93e531ccf3bc10247719c15",
+    credential: "Q7k84R5DmVFvQ7Nq",
+    },
+    {
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "b93e531ccf3bc10247719c15",
+    credential: "Q7k84R5DmVFvQ7Nq",
+    },
+]
 const room = joinRoom({ appId: 'pidge-live-v1', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: { iceServers } }, 'pidge-live-global');
 
 const peerMap = new Map();
