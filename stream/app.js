@@ -450,7 +450,7 @@ async function startStream(source = 'camera') {
 
         if (source === 'screen') {
             localStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+                video: true,
                 audio: true   // captures tab/system audio where supported
             });
             // When the user clicks "Stop sharing" in the browser chrome, end the broadcast
@@ -459,7 +459,7 @@ async function startStream(source = 'camera') {
             });
         } else {
             localStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 640 }, height: { ideal: 360 } },
+                video: true,
                 audio: true
             });
         }
