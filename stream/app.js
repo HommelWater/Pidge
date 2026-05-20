@@ -754,7 +754,7 @@ function updateViewerCount() {
 function renderChannelsList() {
     const container = document.getElementById('channels-list');
     if (liveChannels.size === 0) {
-        container.innerHTML = '<span class="channel-placeholder">No active streams</span>';
+        container.innerHTML = '<span class="channel-placeholder">No active streams, add a TURN server if this is not right and your firewall is blocking the connection.</span>';
         return;
     }
     container.innerHTML = '';
