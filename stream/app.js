@@ -84,19 +84,23 @@ document.getElementById('profile-avatar').value = myProfile.avatarUrl || '';
 document.getElementById('profile-bio').value = myProfile.bio || '';
 
 // ---------- Trystero Room ----------
+// ---------- ICE / TURN Settings ----------
 function getIceServers() {
     const saved = localStorage.getItem('pidge_iceServers');
     if (saved) {
         try { return JSON.parse(saved); } catch (e) { console.warn('Bad ICE JSON', e); }
     }
-    // Default: public STUN only. TURN requires user-supplied credentials.
     return [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
     ];
 }
 
-const room = joinRoom({ appId: 'pidge-live-v1', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: getIceServers() }, 'pidge-live-global');
+const room = joinRoom({
+    appId: 'pidge-live-v1',
+    relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'],
+    rtcConfig: { iceServers: getIceServers() }
+}, 'pidge-live-global');
 
 const peerMap = new Map();
 const peerToUserId = new Map();
@@ -858,28 +862,52 @@ await handleUrlFriendAdd();
 updateFriendsListUI();
 updateStreamUI();
 
-const iceTextarea = document.getElementById('ice-servers-json');
-const savedIce = localStorage.getItem('pidge_iceServers');
-if (iceTextarea) iceTextarea.value = savedIce ? savedIce : JSON.stringify(getIceServers(), null, 2);
+const turnUrl      = document.getElementById('turn-url');
+const turnUser     = document.getElementById('turn-username');
+const turnPass     = document.getElementById('turn-password');
+
+function loadTurnFields() {
+    const saved = localStorage.getItem('pidge_iceServers');
+    if (saved && turnUrl && turnUser && turnPass) {
+        try {
+            const arr = JSON.parse(saved);
+            const turn = arr.find(o => o.username && o.credential);
+            if (turn) {
+                turnUrl.value  = Array.isArray(turn.urls) ? turn.urls[0] : turn.urls;
+                turnUser.value = turn.username || '';
+                turnPass.value = turn.credential || '';
+            }
+        } catch (e) { /* ignore */ }
+    }
+}
+loadTurnFields();
 
 document.getElementById('save-ice-btn').addEventListener('click', () => {
-    const raw = iceTextarea.value.trim();
-    if (!raw) return;
-    try {
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) throw new Error('Must be an array');
-        localStorage.setItem('pidge_iceServers', JSON.stringify(parsed));
-        alert('ICE servers saved. Reload the page for changes to take effect.');
-    } catch (e) {
-        alert('Invalid JSON: ' + e.message);
+    const url  = turnUrl.value.trim();
+    const user = turnUser.value.trim();
+    const pass = turnPass.value.trim();
+
+    const servers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+
+    if (url) {
+        if (!user || !pass) {
+            alert('Please provide username and password for the TURN server.');
+            return;
+        }
+        servers.push({ urls: url, username: user, credential: pass });
     }
+
+    localStorage.setItem('pidge_iceServers', JSON.stringify(servers));
+    alert('TURN settings saved. Reload the page to connect with the new relay.');
 });
 
 document.getElementById('reset-ice-btn').addEventListener('click', () => {
     localStorage.removeItem('pidge_iceServers');
-    iceTextarea.value = JSON.stringify([
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-    ], null, 2);
-    alert('Reset to default. Reload to apply.');
+    if (turnUrl) turnUrl.value = '';
+    if (turnUser) turnUser.value = '';
+    if (turnPass) turnPass.value = '';
+    alert('Reset to default STUN servers. Reload to apply.');
 });
