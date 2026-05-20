@@ -73,6 +73,18 @@
     </div>
 
     <hr style="margin:1rem 0;">
+    <h3>WebRTC ICE Servers</h3>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">
+    Default uses public STUN only. If you are behind a restrictive firewall, paste your own TURN JSON below (e.g. from <a href="https://metered.ca" target="_blank">Metered</a> or <a href="https://xirsys.com" target="_blank">Xirsys</a>).
+    </p>
+    <textarea id="ice-servers-json" placeholder='[
+    {"urls":"stun:stun.l.google.com:19302"},
+    {"urls":"turn:your.turn.server:443","username":"...","credential":"..."}
+    ]' style="width:100%;height:120px;font-family:monospace;font-size:0.8rem;resize:vertical;"></textarea>
+    <button id="save-ice-btn" style="margin-top:0.5rem;width:100%;">Save ICE Servers</button>
+    <button id="reset-ice-btn" style="margin-top:0.3rem;width:100%;background:var(--color-items);">Reset to Default (STUN only)</button>
+
+    <hr style="margin:1rem 0;">
     <h3>Your Profile</h3>
     <div class="profile-form">
       <input type="text" id="profile-name" placeholder="Display Name">

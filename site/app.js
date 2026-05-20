@@ -84,33 +84,19 @@
   document.getElementById('profile-bio').value = myProfile.bio || '';
 
   // ---------- Trystero Room ----------
-  const iceServers = [
-      {
-        urls: "stun:stun.relay.metered.ca:80",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80",
-        username: "b93e531ccf3bc10247719c15",
-        credential: "Q7k84R5DmVFvQ7Nq",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80?transport=tcp",
-        username: "b93e531ccf3bc10247719c15",
-        credential: "Q7k84R5DmVFvQ7Nq",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:443",
-        username: "b93e531ccf3bc10247719c15",
-        credential: "Q7k84R5DmVFvQ7Nq",
-      },
-      {
-        urls: "turns:global.relay.metered.ca:443?transport=tcp",
-        username: "b93e531ccf3bc10247719c15",
-        credential: "Q7k84R5DmVFvQ7Nq",
-      },
-  ]
-  const room = joinRoom({ appId: 'pidge-v2', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: { iceServers }, }, 'pidge-global');
+  function getIceServers() {
+      const saved = localStorage.getItem('pidge_iceServers');
+      if (saved) {
+          try { return JSON.parse(saved); } catch (e) { console.warn('Bad ICE JSON', e); }
+      }
+      // Default: public STUN only. TURN requires user-supplied credentials.
+      return [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+      ];
+  }
 
+  const room = joinRoom({ appId: 'pidge-v2', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: getIceServers() }, 'pidge-global');
   const peerMap = new Map();
   const peerToUserId = new Map();
   const peerPublicKeys = new Map();
@@ -547,3 +533,29 @@
   }
   await handleUrlFriendAdd();
   updateFriendsListUI();
+
+  const iceTextarea = document.getElementById('ice-servers-json');
+  const savedIce = localStorage.getItem('pidge_iceServers');
+  if (iceTextarea) iceTextarea.value = savedIce ? savedIce : JSON.stringify(getIceServers(), null, 2);
+
+  document.getElementById('save-ice-btn').addEventListener('click', () => {
+      const raw = iceTextarea.value.trim();
+      if (!raw) return;
+      try {
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) throw new Error('Must be an array');
+          localStorage.setItem('pidge_iceServers', JSON.stringify(parsed));
+          alert('ICE servers saved. Reload the page for changes to take effect.');
+      } catch (e) {
+          alert('Invalid JSON: ' + e.message);
+      }
+  });
+
+  document.getElementById('reset-ice-btn').addEventListener('click', () => {
+      localStorage.removeItem('pidge_iceServers');
+      iceTextarea.value = JSON.stringify([
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+      ], null, 2);
+      alert('Reset to default. Reload to apply.');
+  });
