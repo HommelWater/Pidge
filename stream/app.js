@@ -85,30 +85,12 @@ document.getElementById('profile-bio').value = myProfile.bio || '';
 
 // ---------- Trystero Room ----------
 const iceServers = [
-    {
-    urls: "stun:stun.relay.metered.ca:80",
-    },
-    {
-    urls: "turn:global.relay.metered.ca:80",
-    username: "b93e531ccf3bc10247719c15",
-    credential: "Q7k84R5DmVFvQ7Nq",
-    },
-    {
-    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-    username: "b93e531ccf3bc10247719c15",
-    credential: "Q7k84R5DmVFvQ7Nq",
-    },
-    {
-    urls: "turn:global.relay.metered.ca:443",
-    username: "b93e531ccf3bc10247719c15",
-    credential: "Q7k84R5DmVFvQ7Nq",
-    },
-    {
-    urls: "turns:global.relay.metered.ca:443?transport=tcp",
-    username: "b93e531ccf3bc10247719c15",
-    credential: "Q7k84R5DmVFvQ7Nq",
-    },
-]
+    { urls: "stun:stun.relay.metered.ca:80" },
+    { urls: "turn:global.relay.metered.ca:80", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
+    { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
+    { urls: "turn:global.relay.metered.ca:443", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
+    { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "b93e531ccf3bc10247719c15", credential: "Q7k84R5DmVFvQ7Nq" },
+];
 const room = joinRoom({ appId: 'pidge-live-v1', relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net'], rtcConfig: { iceServers } }, 'pidge-live-global');
 
 const peerMap = new Map();
@@ -117,15 +99,14 @@ const peerPublicKeys = new Map();
 let friends = new Set(JSON.parse(localStorage.getItem('pidge_friends') || '[]'));
 
 // Raw actions
-const [broadcastHelloRaw, receiveHelloRaw] = room.makeAction('hello');
-const [sendStreamStartRaw, receiveStreamStartRaw] = room.makeAction('stream-start');
-const [sendStreamChunkRaw, receiveStreamChunkRaw] = room.makeAction('stream-chunk');
-const [sendStreamStopRaw, receiveStreamStopRaw] = room.makeAction('stream-stop');
-const [sendChatRaw, receiveChatRaw] = room.makeAction('chat');
-const [sendFriendReqRaw, receiveFriendReqRaw] = room.makeAction('friend-req');
-const [sendFriendAcceptRaw, receiveFriendAcceptRaw] = room.makeAction('friend-accept');
-const [sendProfileRaw, receiveProfileRaw] = room.makeAction('profile');
-const [requestProfileRaw, receiveProfileRequestRaw] = room.makeAction('profile-req');
+const [broadcastHelloRaw, getHelloRaw] = room.makeAction('hello');
+const [sendStreamStartRaw, getStreamStartRaw] = room.makeAction('stream-start');
+const [sendStreamStopRaw, getStreamStopRaw] = room.makeAction('stream-stop');
+const [sendChatRaw, getChatRaw] = room.makeAction('chat');
+const [sendFriendReqRaw, getFriendReqRaw] = room.makeAction('friend-req');
+const [sendFriendAcceptRaw, getFriendAcceptRaw] = room.makeAction('friend-accept');
+const [sendProfileRaw, getProfileRaw] = room.makeAction('profile');
+const [requestProfileRaw, getProfileRequestRaw] = room.makeAction('profile-req');
 
 // ---------- Pending / Last Seen ----------
 const pendingFriendReqs = new Set(JSON.parse(localStorage.getItem('pidge_pendingFriendReqs') || '[]'));
@@ -135,16 +116,12 @@ const friendLastSeen = new Map(JSON.parse(localStorage.getItem('pidge_friendLast
 function saveFriendLastSeen() { localStorage.setItem('pidge_friendLastSeen', JSON.stringify([...friendLastSeen])); }
 
 // ---------- Stream State ----------
-let mediaRecorder = null;
 let localStream = null;
 let isLive = false;
-let streamMimeType = '';
-let mediaSource = null;
-let sourceBuffer = null;
-let chunkQueue = [];
-let isSourceOpen = false;
 let currentStreamer = null;
-const liveChannels = new Map(); // userId -> { mimeType, timestamp }
+const liveChannels = new Map(); // userId -> { timestamp }
+const peerStreams = new Map(); // peerId -> MediaStream
+const pendingStreamStarts = new Map(); // peerId -> { payload, sig }
 
 // ---------- Discovery ----------
 room.onPeerJoin(async peerId => {
@@ -152,14 +129,17 @@ room.onPeerJoin(async peerId => {
     const sig = await signPayload(payload, IDENTITY.privateKey);
     broadcastHelloRaw({ payload, sig });
 
-    if (isLive) {
-        const sPayload = { streamerId: USER_ID, mimeType: streamMimeType, timestamp: Date.now() };
-        const sSig = await signPayload(sPayload, IDENTITY.privateKey);
-        sendStreamStartRaw({ payload: sPayload, sig: sSig }, peerId);
+    if (isLive && localStream) {
+        setTimeout(async () => {
+            const sPayload = { streamerId: USER_ID, timestamp: Date.now() };
+            const sSig = await signPayload(sPayload, IDENTITY.privateKey);
+            sendStreamStartRaw({ payload: sPayload, sig: sSig }, peerId);
+            try { room.addStream(localStream, peerId); } catch (e) { console.warn('addStream failed', e); }
+        }, 1200);
     }
 });
 
-receiveHelloRaw(async ({ payload, sig }, peerId) => {
+async function onHello({ payload, sig }, peerId) {
     const { userId, publicKeyJwk, profile } = payload;
     let pubKey;
     try { pubKey = await importPublicKey(publicKeyJwk); } catch (e) { return; }
@@ -180,9 +160,25 @@ receiveHelloRaw(async ({ payload, sig }, peerId) => {
         friendReqSentPeers.add(peerId);
     }
 
+    const pending = pendingStreamStarts.get(peerId);
+    if (pending) {
+        pendingStreamStarts.delete(peerId);
+        onStreamStart(pending, peerId);
+    }
+
+    const existingStream = peerStreams.get(peerId);
+    if (existingStream && currentStreamer === userId) {
+        attachStream(existingStream, false);
+    }
+
+    if (friends.has(userId)) {
+        friendLastSeen.delete(userId);
+        saveFriendLastSeen();
+    }
     updateFriendsListUI();
     updateViewerCount();
-});
+}
+getHelloRaw(onHello);
 
 room.onPeerLeave(peerId => {
     const userId = peerToUserId.get(peerId);
@@ -190,13 +186,19 @@ room.onPeerLeave(peerId => {
         if (friends.has(userId)) { friendLastSeen.set(userId, Date.now()); saveFriendLastSeen(); }
         peerMap.delete(userId);
         peerToUserId.delete(peerId);
+        peerStreams.delete(peerId);
 
         if (liveChannels.has(userId)) {
             liveChannels.delete(userId);
             if (currentStreamer === userId) {
                 currentStreamer = null;
-                cleanupMediaSource();
+                const videoEl = document.getElementById('main-video');
+                videoEl.srcObject = null;
+                videoEl.src = '';
+                videoEl.muted = true;
                 updateStreamUI();
+                const next = liveChannels.keys().next().value;
+                if (next) switchToStreamer(next);
             }
             renderChannelsList();
         }
@@ -211,8 +213,154 @@ setTimeout(async () => {
     broadcastHelloRaw({ payload, sig });
 }, 500);
 
+// ---------- Trystero onStream ----------
+room.onStream((stream, peerId) => {
+    const userId = peerToUserId.get(peerId);
+    peerStreams.set(peerId, stream);
+    if (userId && !liveChannels.has(userId) && userId !== USER_ID) {
+        liveChannels.set(userId, { timestamp: Date.now() });
+        renderChannelsList();
+    }
+    if (userId && currentStreamer === userId) {
+        attachStream(stream, false);
+    }
+});
+
+// ---------- Stream Action Handlers ----------
+async function onStreamStart({ payload, sig }, peerId) {
+    let sender = peerToUserId.get(peerId);
+    let key = sender ? peerPublicKeys.get(sender) : null;
+
+    if (!sender || !key) {
+        pendingStreamStarts.set(peerId, { payload, sig });
+        setTimeout(() => pendingStreamStarts.delete(peerId), 5000);
+        return;
+    }
+
+    if (!await verifyPayload(payload, sig, key)) return;
+    const { streamerId, timestamp } = payload;
+    if (streamerId === USER_ID) return;
+
+    liveChannels.set(streamerId, { timestamp });
+    renderChannelsList();
+
+    if (!currentStreamer) {
+        switchToStreamer(streamerId);
+    }
+}
+getStreamStartRaw(onStreamStart);
+
+async function onStreamStop({ payload, sig }, peerId) {
+    const sender = peerToUserId.get(peerId);
+    if (!sender) return;
+    const key = peerPublicKeys.get(sender);
+    if (!key) return;
+    if (!await verifyPayload(payload, sig, key)) return;
+    const { streamerId } = payload;
+
+    liveChannels.delete(streamerId);
+    renderChannelsList();
+    if (currentStreamer === streamerId) {
+        currentStreamer = null;
+        const videoEl = document.getElementById('main-video');
+        videoEl.srcObject = null;
+        videoEl.src = '';
+        videoEl.muted = true;
+        updateStreamUI();
+        const next = liveChannels.keys().next().value;
+        if (next) switchToStreamer(next);
+    }
+}
+getStreamStopRaw(onStreamStop);
+
+// ---------- Stream Controls ----------
+async function startStream() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 360 } },
+            audio: true
+        });
+
+        attachStream(localStream, true);
+        isLive = true;
+        currentStreamer = USER_ID;
+
+        const payload = { streamerId: USER_ID, timestamp: Date.now() };
+        const sig = await signPayload(payload, IDENTITY.privateKey);
+
+        peerMap.forEach((peerId, userId) => {
+            if (userId === USER_ID) return;
+            sendStreamStartRaw({ payload, sig }, peerId);
+            try { room.addStream(localStream, peerId); } catch (e) { console.warn('addStream failed for', userId, e); }
+        });
+
+        updateStreamUI();
+    } catch (err) {
+        console.error(err);
+        alert('Could not start stream: ' + err.message);
+    }
+}
+
+function stopStream() {
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+    }
+
+    const payload = { streamerId: USER_ID };
+    signPayload(payload, IDENTITY.privateKey).then(sig => {
+        peerMap.forEach((peerId, userId) => {
+            if (userId === USER_ID) return;
+            sendStreamStopRaw({ payload, sig }, peerId);
+        });
+    });
+
+    const videoEl = document.getElementById('main-video');
+    videoEl.srcObject = null;
+    videoEl.src = '';
+    videoEl.muted = true;
+
+    isLive = false;
+    currentStreamer = null;
+    updateStreamUI();
+}
+
+function switchToStreamer(userId) {
+    if (currentStreamer === userId) return;
+    currentStreamer = userId;
+
+    const videoEl = document.getElementById('main-video');
+
+    if (userId === USER_ID && localStream) {
+        attachStream(localStream, true);
+        updateStreamUI();
+        return;
+    }
+
+    const peerId = peerMap.get(userId);
+    const stream = peerId ? peerStreams.get(peerId) : null;
+
+    if (stream) {
+        attachStream(stream, false);
+    } else {
+        videoEl.srcObject = null;
+        videoEl.src = '';
+        videoEl.muted = true;
+    }
+    updateStreamUI();
+}
+
+function attachStream(stream, muted = false) {
+    const videoEl = document.getElementById('main-video');
+    if (videoEl.srcObject !== stream) {
+        videoEl.srcObject = stream;
+    }
+    videoEl.muted = muted;
+    videoEl.play().catch(e => console.warn('Autoplay blocked', e));
+}
+
 // ---------- Profile Network ----------
-receiveProfileRequestRaw(async ({ payload, sig }, peerId) => {
+async function onProfileRequest({ payload, sig }, peerId) {
     const sender = peerToUserId.get(peerId);
     if (!sender) return;
     const key = peerPublicKeys.get(sender);
@@ -221,17 +369,19 @@ receiveProfileRequestRaw(async ({ payload, sig }, peerId) => {
     const respPayload = { userId: USER_ID, profile: myProfile };
     const respSig = await signPayload(respPayload, IDENTITY.privateKey);
     sendProfileRaw({ payload: respPayload, sig: respSig }, peerId);
-});
+}
+getProfileRequestRaw(onProfileRequest);
 
-receiveProfileRaw(async ({ payload, sig }) => {
+async function onProfile({ payload, sig }) {
     const { userId, profile } = payload;
     const key = peerPublicKeys.get(userId);
     if (!key) return;
     if (!await verifyPayload(payload, sig, key)) return;
     cacheProfile(userId, profile);
     if (currentProfileUserId === userId) renderProfileModal(userId);
-    renderChannelsList(); // names may have updated
-});
+    renderChannelsList();
+}
+getProfileRaw(onProfile);
 
 async function requestUserProfile(userId) {
     const peerId = peerMap.get(userId);
@@ -274,7 +424,7 @@ document.getElementById('add-friend-btn').addEventListener('click', async () => 
     alert('Friend request sent!');
 });
 
-receiveFriendReqRaw(async ({ payload, sig }, peerId) => {
+async function onFriendReq({ payload, sig }, peerId) {
     const { from } = payload;
     const sender = peerToUserId.get(peerId);
     if (sender !== from) return;
@@ -288,9 +438,10 @@ receiveFriendReqRaw(async ({ payload, sig }, peerId) => {
         const acceptSig = await signPayload(acceptPayload, IDENTITY.privateKey);
         sendFriendAcceptRaw({ payload: acceptPayload, sig: acceptSig }, peerId);
     }
-});
+}
+getFriendReqRaw(onFriendReq);
 
-receiveFriendAcceptRaw(async ({ payload, sig }, peerId) => {
+async function onFriendAccept({ payload, sig }, peerId) {
     const { accepted, from } = payload;
     const sender = peerToUserId.get(peerId);
     if (sender !== from) return;
@@ -301,198 +452,8 @@ receiveFriendAcceptRaw(async ({ payload, sig }, peerId) => {
         friends.add(from);
         pendingFriendReqs.delete(from); savePendingFriendReqs(); saveFriends();
     }
-});
-
-// ---------- Stream Logic ----------
-async function startStream() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 360 } },
-            audio: true
-        });
-
-        const videoEl = document.getElementById('main-video');
-        videoEl.srcObject = localStream;
-        videoEl.muted = true;
-
-        const mimeTypes = [
-            'video/webm;codecs=vp9,opus',
-            'video/webm;codecs=vp8,opus',
-            'video/webm;codecs=h264,opus',
-            'video/webm'
-        ];
-        const mimeType = mimeTypes.find(mt => MediaRecorder.isTypeSupported(mt)) || '';
-        if (!mimeType) { alert('Browser does not support a compatible MediaRecorder codec.'); return; }
-
-        streamMimeType = mimeType;
-        mediaRecorder = new MediaRecorder(localStream, { mimeType, videoBitsPerSecond: 800000 });
-
-        mediaRecorder.ondataavailable = async (e) => {
-            if (e.data.size === 0) return;
-            const base64 = await blobToBase64(e.data);
-            sendStreamChunkRaw({ chunk: base64, mimeType: streamMimeType });
-        };
-
-        mediaRecorder.onstop = () => {
-            sendStreamStopRaw({ streamerId: USER_ID });
-            isLive = false;
-            updateStreamUI();
-        };
-
-        mediaRecorder.start(200);
-
-        const payload = { streamerId: USER_ID, mimeType: streamMimeType, timestamp: Date.now() };
-        const sig = await signPayload(payload, IDENTITY.privateKey);
-        sendStreamStartRaw({ payload, sig });
-
-        isLive = true;
-        currentStreamer = USER_ID;
-        updateStreamUI();
-    } catch (err) {
-        console.error(err);
-        alert('Could not start stream: ' + err.message);
-    }
 }
-
-function stopStream() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    const videoEl = document.getElementById('main-video');
-    videoEl.srcObject = null;
-    videoEl.src = '';
-    videoEl.muted = true;
-    isLive = false;
-    currentStreamer = null;
-    cleanupMediaSource();
-    updateStreamUI();
-}
-
-receiveStreamStartRaw(async ({ payload, sig }, peerId) => {
-    const sender = peerToUserId.get(peerId);
-    if (!sender) return;
-    const key = peerPublicKeys.get(sender);
-    if (!key) return;
-    if (!await verifyPayload(payload, sig, key)) return;
-
-    const { streamerId, mimeType } = payload;
-    if (streamerId === USER_ID) return;
-
-    liveChannels.set(streamerId, { mimeType, timestamp: payload.timestamp });
-    renderChannelsList();
-
-    if (!currentStreamer || currentStreamer === streamerId) {
-        switchToStreamer(streamerId, mimeType);
-    }
-});
-
-receiveStreamChunkRaw(({ streamerId, chunk }, peerId) => {
-    // Verify the chunk is actually coming from the claimed streamer (if we know them)
-    const sender = peerToUserId.get(peerId);
-    if (sender && sender !== streamerId) return;
-
-    if (!chunk || currentStreamer !== streamerId) return;
-
-    try {
-        const buffer = base64ToArrayBuffer(chunk);
-        appendChunk(buffer);
-    } catch (e) {
-        console.warn('Dropped corrupt chunk:', e);
-    }
-});
-
-
-receiveStreamStopRaw(({ streamerId }) => {
-    liveChannels.delete(streamerId);
-    renderChannelsList();
-    if (currentStreamer === streamerId) {
-        currentStreamer = null;
-        cleanupMediaSource();
-        updateStreamUI();
-    }
-});
-
-// ---------- MediaSource Management ----------
-function switchToStreamer(streamerId, mimeType) {
-    if (currentStreamer === streamerId) return;
-    cleanupMediaSource();
-    currentStreamer = streamerId;
-
-    const videoEl = document.getElementById('main-video');
-    videoEl.srcObject = null;
-    videoEl.src = '';
-    videoEl.muted = false;
-
-    if (streamerId === USER_ID && localStream) {
-        videoEl.srcObject = localStream;
-        videoEl.muted = true;
-        updateStreamUI();
-        return;
-    }
-
-    mediaSource = new MediaSource();
-    videoEl.src = URL.createObjectURL(mediaSource);
-
-    mediaSource.addEventListener('sourceopen', () => {
-        isSourceOpen = true;
-        const codec = mimeType || 'video/webm; codecs="vp8,opus"';
-        try {
-            sourceBuffer = mediaSource.addSourceBuffer(codec);
-            sourceBuffer.addEventListener('updateend', processChunkQueue);
-            processChunkQueue();
-        } catch (e) {
-            console.error('addSourceBuffer failed:', e);
-        }
-    });
-
-    mediaSource.addEventListener('sourceended', () => { isSourceOpen = false; });
-    mediaSource.addEventListener('error', (e) => { console.error('MediaSource error:', e); });
-
-    updateStreamUI();
-}
-
-function appendChunk(buffer) {
-    chunkQueue.push(buffer);
-    processChunkQueue();
-}
-
-function processChunkQueue() {
-    if (!sourceBuffer || !isSourceOpen || sourceBuffer.updating || chunkQueue.length === 0) return;
-    const chunk = chunkQueue.shift();
-    try {
-        sourceBuffer.appendBuffer(chunk);
-    } catch (e) {
-        if (e.name === 'QuotaExceededError') {
-            try {
-                const video = document.getElementById('main-video');
-                if (video.buffered.length > 0) {
-                    const start = video.buffered.start(0);
-                    const end = video.currentTime - 5;
-                    if (end > start) sourceBuffer.remove(start, end);
-                }
-            } catch (e2) {}
-            chunkQueue.unshift(chunk);
-        } else {
-            console.warn('appendBuffer error:', e);
-        }
-    }
-}
-
-function cleanupMediaSource() {
-    isSourceOpen = false;
-    if (sourceBuffer) {
-        try { sourceBuffer.removeEventListener('updateend', processChunkQueue); } catch (e) {}
-        sourceBuffer = null;
-    }
-    if (mediaSource) {
-        try { mediaSource.endOfStream(); } catch (e) {}
-        mediaSource = null;
-    }
-    chunkQueue = [];
-    const videoEl = document.getElementById('main-video');
-    if (videoEl.src.startsWith('blob:')) {
-        URL.revokeObjectURL(videoEl.src);
-    }
-}
+getFriendAcceptRaw(onFriendAccept);
 
 // ---------- Chat Logic ----------
 async function sendChatMessage() {
@@ -508,7 +469,7 @@ async function sendChatMessage() {
     displayChatMessage({ userId: USER_ID, text, timestamp: Date.now() });
 }
 
-receiveChatRaw(async ({ payload, sig }, peerId) => {
+async function onChat({ payload, sig }, peerId) {
     const sender = peerToUserId.get(peerId);
     if (!sender) return;
     const key = peerPublicKeys.get(sender);
@@ -516,7 +477,8 @@ receiveChatRaw(async ({ payload, sig }, peerId) => {
     if (!await verifyPayload(payload, sig, key)) return;
     if (sender === USER_ID) return;
     displayChatMessage({ userId: sender, ...payload });
-});
+}
+getChatRaw(onChat);
 
 function displayChatMessage(msg) {
     const container = document.getElementById('chat-messages');
@@ -581,7 +543,7 @@ function renderChannelsList() {
         tag.className = 'channel-tag' + (currentStreamer === userId ? ' active' : '');
         const prof = getProfile(userId);
         tag.textContent = prof.displayName || userId.slice(0,8);
-        tag.addEventListener('click', () => switchToStreamer(userId, info.mimeType));
+        tag.addEventListener('click', () => switchToStreamer(userId));
         container.appendChild(tag);
     });
 }
@@ -671,28 +633,6 @@ function timeAgo(timestamp) {
 }
 function escapeHtml(text) { if (!text) return ''; const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
 function hashCode(str) { let h = 0; for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; } return Math.abs(h); }
-
-function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const result = reader.result; // data:video/webm;codecs=vp8,opus;base64,GkXf...
-            // Find the fixed ;base64, marker instead of splitting on commas
-            const idx = result.indexOf(';base64,');
-            const base64 = idx !== -1 ? result.slice(idx + 8) : '';
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-}
-
-function base64ToArrayBuffer(base64) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes.buffer;
-}
 
 // ---------- Init ----------
 await handleUrlFriendAdd();
