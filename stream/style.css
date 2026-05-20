@@ -116,6 +116,14 @@ body {
     pointer-events: none;
 }
 
+#screen-share-btn {
+  background: #27ae60;
+  color: #fff;
+}
+#screen-share-btn:hover {
+  background: #219150;
+}
+
 #stream-info h3 { margin: 0; font-size: 1.1rem; }
 #viewer-count { font-size: 0.85rem; opacity: 0.9; }
 

@@ -124,6 +124,7 @@ function saveFriendLastSeen() { localStorage.setItem('pidge_friendLastSeen', JSO
 let localStream = null;
 let isLive = false;
 let currentStreamer = null;
+let currentStreamSource = 'camera';
 const liveChannels = new Map(); // userId -> { timestamp }
 const peerStreams = new Map(); // peerId -> MediaStream
 const pendingStreamStarts = new Map(); // peerId -> { payload, sig }
@@ -434,12 +435,25 @@ async function onStreamRequest({ payload, sig }, peerId) {
 getStreamRequestRaw(onStreamRequest);
 
 // ---------- Stream Controls ----------
-async function startStream() {
+async function startStream(source = 'camera') {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 360 } },
-            audio: true
-        });
+        currentStreamSource = source;
+
+        if (source === 'screen') {
+            localStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+                audio: true   // captures tab/system audio where supported
+            });
+            // When the user clicks "Stop sharing" in the browser chrome, end the broadcast
+            localStream.getVideoTracks().forEach(track => {
+                track.onended = () => { if (isLive) stopStream(); };
+            });
+        } else {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 360 } },
+                audio: true
+            });
+        }
 
         attachStream(localStream, true);
         isLive = true;
@@ -449,14 +463,11 @@ async function startStream() {
         const payload = { streamerId: USER_ID, timestamp: Date.now() };
         const sig = await signPayload(payload, IDENTITY.privateKey);
 
-        // Announce to everyone that we're live
         peerMap.forEach((peerId, userId) => {
             if (userId === USER_ID) return;
             sendStreamStartRaw({ payload, sig }, peerId);
         });
 
-        // Only send the actual media to a small handful directly.
-        // Everyone else will discover it via relays.
         const peers = Array.from(peerMap.entries()).filter(([uid]) => uid !== USER_ID);
         let sent = 0;
         for (const [userId, peerId] of peers) {
@@ -695,23 +706,28 @@ function displayChatMessage(msg) {
 // ---------- UI Updates ----------
 function updateStreamUI() {
     const goLiveBtn = document.getElementById('go-live-btn');
+    const screenBtn = document.getElementById('screen-share-btn');   // <-- NEW ref
     const stopBtn = document.getElementById('stop-stream-btn');
     const liveIndicator = document.getElementById('live-indicator');
     const streamerName = document.getElementById('streamer-name');
 
     if (isLive) {
         goLiveBtn.classList.add('hidden');
+        screenBtn.classList.add('hidden');            // <-- hide while live
         stopBtn.classList.remove('hidden');
         liveIndicator.classList.remove('hidden');
-        streamerName.textContent = (myProfile.displayName || USER_ID.slice(0,8)) + ' (You)';
+        const suffix = currentStreamSource === 'screen' ? ' (Screen)' : ' (You)';
+        streamerName.textContent = (myProfile.displayName || USER_ID.slice(0,8)) + suffix;
     } else if (currentStreamer && currentStreamer !== USER_ID) {
         goLiveBtn.classList.remove('hidden');
+        screenBtn.classList.remove('hidden');         // <-- show when not live
         stopBtn.classList.add('hidden');
         liveIndicator.classList.add('hidden');
         const prof = getProfile(currentStreamer);
         streamerName.textContent = prof.displayName || currentStreamer.slice(0,8);
     } else {
         goLiveBtn.classList.remove('hidden');
+        screenBtn.classList.remove('hidden');         // <-- show when offline
         stopBtn.classList.add('hidden');
         liveIndicator.classList.add('hidden');
         streamerName.textContent = 'Offline';
@@ -775,6 +791,9 @@ document.getElementById('go-live-btn').addEventListener('click', startStream);
 document.getElementById('stop-stream-btn').addEventListener('click', stopStream);
 document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
 document.getElementById('chat-input').addEventListener('keypress', e => { if (e.key === 'Enter') sendChatMessage(); });
+document.getElementById('go-live-btn').addEventListener('click', () => startStream('camera'));
+document.getElementById('screen-share-btn').addEventListener('click', () => startStream('screen'));
+document.getElementById('stop-stream-btn').addEventListener('click', stopStream);
 
 // ---------- Profile Modal ----------
 let currentProfileUserId = null;
