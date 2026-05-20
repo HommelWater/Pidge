@@ -108,6 +108,11 @@ const [sendFriendAcceptRaw, getFriendAcceptRaw] = room.makeAction('friend-accept
 const [sendProfileRaw, getProfileRaw] = room.makeAction('profile');
 const [requestProfileRaw, getProfileRequestRaw] = room.makeAction('profile-req');
 
+// ---------- NEW: Relay actions ----------
+const [sendStreamOfferRaw, getStreamOfferRaw] = room.makeAction('stream-offer');
+const [sendStreamRelayRaw, getStreamRelayRaw] = room.makeAction('stream-relay');
+const [sendStreamRequestRaw, getStreamRequestRaw] = room.makeAction('stream-req');
+
 // ---------- Pending / Last Seen ----------
 const pendingFriendReqs = new Set(JSON.parse(localStorage.getItem('pidge_pendingFriendReqs') || '[]'));
 const friendReqSentPeers = new Set();
@@ -123,6 +128,16 @@ const liveChannels = new Map(); // userId -> { timestamp }
 const peerStreams = new Map(); // peerId -> MediaStream
 const pendingStreamStarts = new Map(); // peerId -> { payload, sig }
 
+// ---------- NEW: Mesh relay state ----------
+const MAX_DIRECT_PEERS = 3;   // Original streamer direct feeds
+const MAX_RELAY_PEERS = 2;    // Each viewer forwards to at most this many peers
+
+const myRelayedStreams = new Map();   // streamerId -> MediaStream I hold and can forward
+const streamSources = new Map();      // streamerId -> peerId I received it from
+const relayRegistry = new Map();      // streamerId -> Set of peerIds offering relay
+const pendingStreamOffers = new Map(); // peerId -> { streamerId, timestamp }
+const myOutgoingRelays = new Map();   // peerId -> streamerId I'm sending to this peer
+
 // ---------- Discovery ----------
 room.onPeerJoin(async peerId => {
     const payload = { userId: USER_ID, publicKeyJwk: IDENTITY.publicJwk, profile: myProfile };
@@ -134,8 +149,21 @@ room.onPeerJoin(async peerId => {
             const sPayload = { streamerId: USER_ID, timestamp: Date.now() };
             const sSig = await signPayload(sPayload, IDENTITY.privateKey);
             sendStreamStartRaw({ payload: sPayload, sig: sSig }, peerId);
-            try { room.addStream(localStream, peerId); } catch (e) { console.warn('addStream failed', e); }
+
+            // Only feed directly if under capacity; otherwise new peer must find a relay
+            const directCount = Array.from(myOutgoingRelays.values()).filter(sid => sid === USER_ID).length;
+            if (directCount < MAX_DIRECT_PEERS) {
+                await sendStreamToPeer(localStream, USER_ID, peerId, false);
+            }
         }, 1200);
+    }
+
+    // If I'm already relaying any streams, let the newcomer know
+    for (const [streamerId, stream] of myRelayedStreams.entries()) {
+        if (streamerId === USER_ID) continue;
+        const rPayload = { streamerId, relayId: USER_ID };
+        const rSig = await signPayload(rPayload, IDENTITY.privateKey);
+        sendStreamRelayRaw({ payload: rPayload, sig: rSig }, peerId);
     }
 });
 
@@ -166,9 +194,13 @@ async function onHello({ payload, sig }, peerId) {
         onStreamStart(pending, peerId);
     }
 
-    const existingStream = peerStreams.get(peerId);
-    if (existingStream && currentStreamer === userId) {
-        attachStream(existingStream, false);
+    // If we already received a stream from this peer, make sure it's attached if we're watching it
+    for (const [sid, sourcePid] of streamSources.entries()) {
+        if (sourcePid === peerId && currentStreamer === sid) {
+            const existingStream = peerStreams.get(peerId);
+            if (existingStream) attachStream(existingStream, false);
+            break;
+        }
     }
 
     if (friends.has(userId)) {
@@ -182,11 +214,35 @@ getHelloRaw(onHello);
 
 room.onPeerLeave(peerId => {
     const userId = peerToUserId.get(peerId);
+
+    // Clean up any relay state for this peer
+    myOutgoingRelays.delete(peerId);
+
     if (userId) {
         if (friends.has(userId)) { friendLastSeen.set(userId, Date.now()); saveFriendLastSeen(); }
         peerMap.delete(userId);
         peerToUserId.delete(peerId);
         peerStreams.delete(peerId);
+
+        // Remove from relay registry
+        relayRegistry.forEach((relays, sid) => relays.delete(peerId));
+
+        // If this peer was our source for a stream we are watching, try to reconnect
+        for (const [sid, sourcePid] of Array.from(streamSources.entries())) {
+            if (sourcePid === peerId) {
+                streamSources.delete(sid);
+                myRelayedStreams.delete(sid);
+                if (currentStreamer === sid) {
+                    const videoEl = document.getElementById('main-video');
+                    videoEl.srcObject = null;
+                    videoEl.src = '';
+                    videoEl.muted = true;
+                    setTimeout(() => {
+                        if (currentStreamer === sid) switchToStreamer(sid);
+                    }, 800);
+                }
+            }
+        }
 
         if (liveChannels.has(userId)) {
             liveChannels.delete(userId);
@@ -213,17 +269,65 @@ setTimeout(async () => {
     broadcastHelloRaw({ payload, sig });
 }, 500);
 
+// ---------- NEW: Stream forwarding helpers ----------
+async function sendStreamToPeer(stream, streamerId, peerId, isRelay = false) {
+    const payload = { streamerId, offererId: USER_ID, isRelay };
+    const sig = await signPayload(payload, IDENTITY.privateKey);
+    sendStreamOfferRaw({ payload, sig }, peerId);
+    setTimeout(() => {
+        try {
+            room.addStream(stream, peerId);
+            myOutgoingRelays.set(peerId, streamerId);
+        } catch (e) {
+            console.warn('addStream failed', e);
+        }
+    }, 300);
+}
+
+async function requestStreamFromPeer(streamerId, peerId) {
+    const payload = { streamerId, requesterId: USER_ID };
+    const sig = await signPayload(payload, IDENTITY.privateKey);
+    sendStreamRequestRaw({ payload, sig }, peerId);
+}
+
 // ---------- Trystero onStream ----------
 room.onPeerStream((stream, peerId) => {
-    const userId = peerToUserId.get(peerId);
-    peerStreams.set(peerId, stream);
-    if (userId && !liveChannels.has(userId) && userId !== USER_ID) {
-        liveChannels.set(userId, { timestamp: Date.now() });
-        renderChannelsList();
+    const offer = pendingStreamOffers.get(peerId);
+    if (!offer) {
+        console.warn('Received stream without matching offer from', peerId);
+        return;
     }
-    if (userId && currentStreamer === userId) {
+    const { streamerId } = offer;
+    pendingStreamOffers.delete(peerId);
+
+    peerStreams.set(peerId, stream);
+    myRelayedStreams.set(streamerId, stream);
+    streamSources.set(streamerId, peerId);
+
+    if (!liveChannels.has(streamerId)) {
+        liveChannels.set(streamerId, { timestamp: Date.now() });
+    }
+
+    if (!relayRegistry.has(streamerId)) relayRegistry.set(streamerId, new Set());
+    relayRegistry.get(streamerId).add(peerId);
+
+    if (currentStreamer === streamerId) {
         attachStream(stream, false);
     }
+
+    // If I'm not the original streamer, announce I can now relay this stream
+    if (streamerId !== USER_ID) {
+        const rPayload = { streamerId, relayId: USER_ID };
+        signPayload(rPayload, IDENTITY.privateKey).then(rSig => {
+            peerMap.forEach((otherPeerId, otherUserId) => {
+                if (otherUserId === USER_ID) return;
+                sendStreamRelayRaw({ payload: rPayload, sig: rSig }, otherPeerId);
+            });
+        });
+    }
+
+    renderChannelsList();
+    updateViewerCount();
 });
 
 // ---------- Stream Action Handlers ----------
@@ -259,7 +363,11 @@ async function onStreamStop({ payload, sig }, peerId) {
     const { streamerId } = payload;
 
     liveChannels.delete(streamerId);
+    relayRegistry.delete(streamerId);
+    myRelayedStreams.delete(streamerId);
+    streamSources.delete(streamerId);
     renderChannelsList();
+
     if (currentStreamer === streamerId) {
         currentStreamer = null;
         const videoEl = document.getElementById('main-video');
@@ -273,6 +381,58 @@ async function onStreamStop({ payload, sig }, peerId) {
 }
 getStreamStopRaw(onStreamStop);
 
+// ---------- NEW: Relay action handlers ----------
+async function onStreamOffer({ payload, sig }, peerId) {
+    const { streamerId, offererId } = payload;
+    const sender = peerToUserId.get(peerId);
+    if (sender !== offererId) return;
+    const key = peerPublicKeys.get(sender);
+    if (!key) return;
+    if (!await verifyPayload(payload, sig, key)) return;
+
+    pendingStreamOffers.set(peerId, { streamerId, timestamp: Date.now() });
+    setTimeout(() => pendingStreamOffers.delete(peerId), 10000);
+}
+getStreamOfferRaw(onStreamOffer);
+
+async function onStreamRelay({ payload, sig }, peerId) {
+    const { streamerId, relayId } = payload;
+    const sender = peerToUserId.get(peerId);
+    if (sender !== relayId) return;
+    const key = peerPublicKeys.get(sender);
+    if (!key) return;
+    if (!await verifyPayload(payload, sig, key)) return;
+
+    if (!relayRegistry.has(streamerId)) relayRegistry.set(streamerId, new Set());
+    relayRegistry.get(streamerId).add(peerId);
+
+    // If we're trying to watch this streamer but don't have the stream yet, request it now
+    if (currentStreamer === streamerId && !myRelayedStreams.has(streamerId) && streamerId !== USER_ID) {
+        requestStreamFromPeer(streamerId, peerId);
+    }
+}
+getStreamRelayRaw(onStreamRelay);
+
+async function onStreamRequest({ payload, sig }, peerId) {
+    const { streamerId, requesterId } = payload;
+    const sender = peerToUserId.get(peerId);
+    if (sender !== requesterId) return;
+    const key = peerPublicKeys.get(sender);
+    if (!key) return;
+    if (!await verifyPayload(payload, sig, key)) return;
+
+    const stream = myRelayedStreams.get(streamerId);
+    if (!stream) return;
+
+    // Respect capacity limits so no single peer gets overloaded
+    const currentCount = Array.from(myOutgoingRelays.values()).filter(sid => sid === streamerId).length;
+    const limit = (streamerId === USER_ID) ? MAX_DIRECT_PEERS : MAX_RELAY_PEERS;
+    if (currentCount >= limit) return;
+
+    await sendStreamToPeer(stream, streamerId, peerId, streamerId !== USER_ID);
+}
+getStreamRequestRaw(onStreamRequest);
+
 // ---------- Stream Controls ----------
 async function startStream() {
     try {
@@ -284,15 +444,26 @@ async function startStream() {
         attachStream(localStream, true);
         isLive = true;
         currentStreamer = USER_ID;
+        myRelayedStreams.set(USER_ID, localStream);
 
         const payload = { streamerId: USER_ID, timestamp: Date.now() };
         const sig = await signPayload(payload, IDENTITY.privateKey);
 
+        // Announce to everyone that we're live
         peerMap.forEach((peerId, userId) => {
             if (userId === USER_ID) return;
             sendStreamStartRaw({ payload, sig }, peerId);
-            try { room.addStream(localStream, peerId); } catch (e) { console.warn('addStream failed for', userId, e); }
         });
+
+        // Only send the actual media to a small handful directly.
+        // Everyone else will discover it via relays.
+        const peers = Array.from(peerMap.entries()).filter(([uid]) => uid !== USER_ID);
+        let sent = 0;
+        for (const [userId, peerId] of peers) {
+            if (sent >= MAX_DIRECT_PEERS) break;
+            await sendStreamToPeer(localStream, USER_ID, peerId, false);
+            sent++;
+        }
 
         updateStreamUI();
     } catch (err) {
@@ -314,6 +485,12 @@ function stopStream() {
             sendStreamStopRaw({ payload, sig }, peerId);
         });
     });
+
+    // Clean up my own outgoing relay entries
+    for (const [pid, sid] of Array.from(myOutgoingRelays.entries())) {
+        if (sid === USER_ID) myOutgoingRelays.delete(pid);
+    }
+    myRelayedStreams.delete(USER_ID);
 
     const videoEl = document.getElementById('main-video');
     videoEl.srcObject = null;
@@ -337,16 +514,34 @@ function switchToStreamer(userId) {
         return;
     }
 
-    const peerId = peerMap.get(userId);
-    const stream = peerId ? peerStreams.get(peerId) : null;
-
-    if (stream) {
-        attachStream(stream, false);
-    } else {
-        videoEl.srcObject = null;
-        videoEl.src = '';
-        videoEl.muted = true;
+    // If we already have this stream cached from a previous relay, use it
+    const cachedStream = myRelayedStreams.get(userId);
+    if (cachedStream) {
+        attachStream(cachedStream, false);
+        updateStreamUI();
+        return;
     }
+
+    // Otherwise request it. Prefer a relay to spare the original streamer.
+    const streamerPeerId = peerMap.get(userId);
+    const relays = relayRegistry.get(userId);
+
+    if (relays && relays.size > 0) {
+        const candidates = Array.from(relays).filter(pid => peerToUserId.has(pid));
+        // Ask up to 2 random relays for redundancy
+        const chosen = candidates.sort(() => 0.5 - Math.random()).slice(0, 2);
+        if (chosen.length > 0) {
+            chosen.forEach(pid => requestStreamFromPeer(userId, pid));
+        } else if (streamerPeerId) {
+            requestStreamFromPeer(userId, streamerPeerId);
+        }
+    } else if (streamerPeerId) {
+        requestStreamFromPeer(userId, streamerPeerId);
+    }
+
+    videoEl.srcObject = null;
+    videoEl.src = '';
+    videoEl.muted = true;
     updateStreamUI();
 }
 
