@@ -18,6 +18,6 @@ app.mount("/stream/", StaticFiles(directory="./stream/"), name="stream")
 
 @app.get("/{full_path:path}")
 async def spa(full_path: str):
-    if full_path is "stream":
+    if full_path == "stream":
         return FileResponse("stream/index.html")
     return FileResponse("site/index.html")
