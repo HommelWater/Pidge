@@ -367,13 +367,21 @@ receiveStreamStartRaw(async ({ payload, sig }, peerId) => {
     }
 });
 
-receiveStreamChunkRaw(({ chunk, mimeType }, peerId) => {
+receiveStreamChunkRaw(({ streamerId, chunk }, peerId) => {
+    // Verify the chunk is actually coming from the claimed streamer (if we know them)
     const sender = peerToUserId.get(peerId);
-    if (!sender || currentStreamer !== sender) return;
-    if (!chunk) return;
-    const buffer = base64ToArrayBuffer(chunk);
-    appendChunk(buffer);
+    if (sender && sender !== streamerId) return;
+
+    if (!chunk || currentStreamer !== streamerId) return;
+
+    try {
+        const buffer = base64ToArrayBuffer(chunk);
+        appendChunk(buffer);
+    } catch (e) {
+        console.warn('Dropped corrupt chunk:', e);
+    }
 });
+
 
 receiveStreamStopRaw(({ streamerId }) => {
     liveChannels.delete(streamerId);
@@ -387,6 +395,7 @@ receiveStreamStopRaw(({ streamerId }) => {
 
 // ---------- MediaSource Management ----------
 function switchToStreamer(streamerId, mimeType) {
+    if (currentStreamer === streamerId) return;
     cleanupMediaSource();
     currentStreamer = streamerId;
 
@@ -648,11 +657,18 @@ function hashCode(str) { let h = 0; for (let i = 0; i < str.length; i++) { h = (
 function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onloadend = () => {
+            const result = reader.result; // data:video/webm;codecs=vp8,opus;base64,GkXf...
+            // Find the fixed ;base64, marker instead of splitting on commas
+            const idx = result.indexOf(';base64,');
+            const base64 = idx !== -1 ? result.slice(idx + 8) : '';
+            resolve(base64);
+        };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
     });
 }
+
 function base64ToArrayBuffer(base64) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
