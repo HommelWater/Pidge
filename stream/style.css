@@ -125,7 +125,7 @@ body {
     font-family: inherit;
     font-size: 0.95rem;
 }
-#screen-share-btn:hover, .go-live-btn:hover {
+#screen-share-btn:hover, #go-live-btn:hover {
     background: var(--color-button-h);
 }
 
