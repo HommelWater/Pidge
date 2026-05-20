@@ -117,12 +117,16 @@ body {
 }
 
 #screen-share-btn {
+    padding: 0.6rem 1.2rem;
+    font-weight: 600;
+    border: 1px solid var(--color-border);
     background: var(--color-button);
-    color: var(--color-text);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.95rem;
 }
 #screen-share-btn:hover {
     background: var(--color-button-h);
-    color: var(--color-text);
 }
 
 #stream-info h3 { margin: 0; font-size: 1.1rem; }
