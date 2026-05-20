@@ -43,7 +43,7 @@ body {
     border-bottom: 1px solid var(--color-border);
     background: var(--color-card);
     flex-shrink: 0;
-    height:8%;
+    height:6%;
 }
 
 #logo { font-size: 1.3rem; font-weight: 700; }
