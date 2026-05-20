@@ -14,7 +14,10 @@ app.add_middleware(
 )
 
 app.mount("/site/", StaticFiles(directory="./site/"), name="site")
+app.mount("/stream/", StaticFiles(directory="./stream/"), name="stream")
 
 @app.get("/{full_path:path}")
 async def spa(full_path: str):
+    if full_path is "stream":
+        return FileResponse("stream/index.html")
     return FileResponse("site/index.html")

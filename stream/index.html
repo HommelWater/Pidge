@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pidge Live</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widgets=resizes-content">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="stream/style.css">
+</head>
+<body>
+<div class="container">
+  <header id="main-header">
+    <div id="logo">Pidge Live</div>
+    <div id="header-user">
+      <span id="live-indicator" class="hidden">● LIVE</span>
+      <div class="header-avatar" id="header-avatar"></div>
+    </div>
+  </header>
+
+  <div id="app-body">
+    <div id="stream-area">
+      <div id="video-wrapper">
+        <video id="main-video" autoplay playsinline muted></video>
+        <div id="stream-overlay">
+          <div id="stream-info">
+            <h3 id="streamer-name">Offline</h3>
+            <span id="viewer-count">0 peers online</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="stream-meta">
+        <div id="stream-controls">
+          <button id="go-live-btn">Go Live</button>
+          <button id="stop-stream-btn" class="hidden">Stop Stream</button>
+        </div>
+        <div id="live-channels">
+          <strong>Live Now:</strong>
+          <div id="channels-list"><span class="channel-placeholder">No active streams</span></div>
+        </div>
+      </div>
+    </div>
+
+    <aside id="chat-area">
+      <div id="chat-header">Live Chat</div>
+      <div id="chat-messages"></div>
+      <div id="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Send a message..." maxlength="200">
+        <button id="chat-send-btn">Chat</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<button id="settings-button" title="Settings">⚙️</button>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal">
+  <div class="modal-content">
+    <button class="close-modal" data-modal="settings-modal">&times;</button>
+    <h2>Settings</h2>
+    <div style="margin-bottom:1rem;">
+      <strong>Your Pidge ID:</strong><br>
+      <code id="modal-user-id" style="word-break: break-all;"></code>
+      <button id="copy-id">📋 Copy</button>
+    </div>
+    <div style="margin:1rem 0;">
+        <strong>Your Invite Link:</strong><br>
+        <input type="text" id="share-link" readonly style="width:100%; margin-top:0.5rem; padding:0.5rem;">
+        <button id="copy-link" style="margin-top:0.5rem;">📋 Copy Link</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Your Profile</h3>
+    <div class="profile-form">
+      <input type="text" id="profile-name" placeholder="Display Name">
+      <input type="text" id="profile-avatar" placeholder="Avatar Image URL">
+      <textarea id="profile-bio" placeholder="Bio" maxlength="160" style="height:60px; resize:none;"></textarea>
+      <button id="save-profile">Save Profile</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Add Friend</h3>
+    <div class="add-friend-row">
+      <input type="text" id="new-friend-id" placeholder="Friend's Pidge ID">
+      <button id="add-friend-btn">Add</button>
+    </div>
+    <h3>Your Friends</h3>
+    <ul id="friend-list"></ul>
+  </div>
+</div>
+
+<!-- Profile Modal -->
+<div id="profile-modal" class="modal">
+  <div class="modal-content wide">
+    <button class="close-modal" data-modal="profile-modal">&times;</button>
+    <div id="profile-view">
+      <div id="profile-info-container" style="display:flex">
+        <div id="profile-view-avatar" class="profile-avatar-large"></div>
+        <div id="profile-info">
+          <h2 id="profile-view-name"></h2>
+          <code id="profile-view-id"></code>
+          <p id="profile-view-bio" style="margin-top:0.5rem;"></p>
+        </div>
+      </div>
+      <hr style="margin:1rem 0;">
+      <h3>Recent Activity</h3>
+      <div id="profile-view-posts"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="stream/app.js"></script>
+</body>
+</html>

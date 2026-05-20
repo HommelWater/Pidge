@@ -1,14 +1,5 @@
   import { joinRoom } from 'https://esm.run/trystero';
 
-  // ---------- Version / Migration ----------
-  const APP_VERSION = 2;
-  if (parseInt(localStorage.getItem('pidge_version') || '0') !== APP_VERSION) {
-    ['pidge_id','pidge_privateKey','pidge_publicKey','pidge_friends','pidge_postCache',
-     'pidge_profiles','pidge_friendLastSeen','pidge_pendingFriendReqs','pidge_propagated']
-      .forEach(k => localStorage.removeItem(k));
-    localStorage.setItem('pidge_version', String(APP_VERSION));
-  }
-
   // ---------- Crypto Helpers ----------
   function ab2hex(buf) {
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
