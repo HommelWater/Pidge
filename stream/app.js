@@ -214,7 +214,7 @@ setTimeout(async () => {
 }, 500);
 
 // ---------- Trystero onStream ----------
-room.onStream((stream, peerId) => {
+room.onPeerStream((stream, peerId) => {
     const userId = peerToUserId.get(peerId);
     peerStreams.set(peerId, stream);
     if (userId && !liveChannels.has(userId) && userId !== USER_ID) {
