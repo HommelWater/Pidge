@@ -76,6 +76,7 @@ body {
     flex: 1;
     display: flex;
     overflow: hidden;
+    height:94%;
 }
 
 #stream-area {
