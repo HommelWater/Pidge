@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nostr P2P Streaming Platform</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0a0a0c; color: #e2e2e2;
+    margin: 0; padding: 24px; line-height: 1.5;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 6px; }
+  p.sub { color: #888; margin: 0 0 24px; font-size: 0.9rem; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab {
+    padding: 8px 16px; border-radius: 6px; background: #1a1a1d;
+    border: 1px solid #2a2a2e; cursor: pointer; color: #888;
+  }
+  .tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;
+  }
+  .card {
+    background: #141418; border: 1px solid #25252a; border-radius: 10px; padding: 16px;
+  }
+  .card h3 { margin: 0 0 12px; font-size: 1rem; color: #bbb; }
+  .card h4 {
+    margin: 16px 0 8px; font-size: 0.8rem; color: #777;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  label { display: block; font-size: 0.8rem; color: #777; margin-bottom: 4px; }
+  input[type="text"] {
+    width: 100%; background: #0f0f11; color: #e0e0e0; border: 1px solid #333;
+    padding: 8px 10px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; margin-bottom: 10px;
+  }
+  button {
+    padding: 10px 16px; border: none; border-radius: 6px; font-size: 0.9rem;
+    cursor: pointer; margin-right: 8px; margin-bottom: 6px; font-weight: 500;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .primary { background: #2563eb; color: #fff; }
+  .secondary { background: #2a2a2e; color: #fff; }
+  .danger { background: #dc2626; color: #fff; }
+  .success { background: #16a34a; color: #fff; }
+  .warning { background: #ca8a04; color: #fff; }
+  .status { font-size: 0.85rem; color: #aaa; margin-top: 8px; min-height: 1.4em; }
+  .mono { font-family: monospace; word-break: break-all; color: #666; font-size: 0.85rem; }
+  video, canvas {
+    width: 100%; height: auto; aspect-ratio: 16/9; background: #000;
+    border-radius: 8px; display: block;
+  }
+  .hint { font-size: 0.8rem; color: #555; margin-top: 4px; }
+  .peer-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; background: #0f0f11; border-radius: 6px;
+    margin-bottom: 6px; font-size: 0.85rem; border: 1px solid #1f1f23;
+  }
+  .peer-row .npub { font-family: monospace; color: #aaa; word-break: break-all; flex: 1; margin: 0 8px; }
+  .badge {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: #333;
+    white-space: nowrap; margin-left: 6px;
+  }
+  .badge.direct { background: #2563eb; color: #fff; }
+  .badge.relay { background: #7c3aed; color: #fff; }
+  .badge.open { background: #166534; color: #fff; }
+  .badge.closed { background: #7f1d1d; color: #fff; }
+  .badge.reconnecting { background: #ca8a04; color: #fff; }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .stat { background: #0f0f11; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; color: #888; }
+  .stat b { color: #ddd; }
+  .verify-ok { color: #16a34a; }
+  .verify-fail { color: #dc2626; }
+</style>
+</head>
+<body>
+
+<h1>Nostr P2P Streaming Platform</h1>
+<p class="sub">
+  Tree-based live streaming over Nostr + WebRTC. Every video chunk is signed by the streamer and verified by each hop before decode/forward.
+</p>
+
+<div class="tabs">
+  <div class="tab active" id="tabIdentity">Identity</div>
+  <div class="tab" id="tabStream">Stream</div>
+  <div class="tab" id="tabWatch">Watch</div>
+</div>
+
+<!-- Identity -->
+<div class="panel active" id="panelIdentity">
+  <div class="grid">
+    <div class="card">
+      <h3>Your Identity</h3>
+      <button class="secondary" id="genBtn">Generate Keys</button>
+      <label>My npub — share this with others</label>
+      <div class="mono" id="myNpub">-</div>
+      <div class="hint">This keypair is used for Nostr identity and chunk signatures.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Stream -->
+<div class="panel" id="panelStream">
+  <div class="grid">
+    <div class="card">
+      <h3>Camera Source</h3>
+      <button class="primary" id="camBtn">Start Camera & Encode</button>
+      <video id="localVid" autoplay muted playsinline></video>
+      <div class="hint" id="camHint">VP9/VP8 real-time encode. Each chunk is signed with your nsec.</div>
+    </div>
+
+    <div class="card">
+      <h3>Broadcast Control</h3>
+      <button class="success" id="goLiveBtn">Go Live</button>
+      <button class="danger" id="stopStreamBtn" disabled>Stop Stream</button>
+      <div class="status" id="streamStatus">Idle</div>
+
+      <h4>Direct Peers (<span id="directCount">0</span>/5)</h4>
+      <div id="directPeers"><div class="hint">No direct connections</div></div>
+
+      <h4>Known Relays</h4>
+      <div id="relayPeers"><div class="hint">No relay nodes registered</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Watch -->
+<div class="panel" id="panelWatch">
+  <div class="grid">
+    <div class="card">
+      <h3>Join Stream</h3>
+      <label>Streamer npub</label>
+      <input type="text" id="streamerNpub" placeholder="npub1…" spellcheck="false">
+      <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+        <input type="checkbox" id="relayCheck" checked style="width:auto;">
+        Act as relay (accept up to 5 downstream peers)
+      </label>
+      <button class="primary" id="joinBtn">Join Stream</button>
+      <button class="danger" id="leaveBtn" disabled>Leave</button>
+      <div class="status" id="watchStatus">Idle</div>
+
+      <h4>Upstream</h4>
+      <div id="upstreamInfo" class="hint">Not connected</div>
+
+      <h4>Downstream Peers (<span id="downCount">0</span>/5)</h4>
+      <div id="downPeers"><div class="hint">No downstream connections</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Received Video</h3>
+      <canvas id="recvCanvas" width="640" height="360"></canvas>
+      <div class="stats">
+        <div class="stat">Signature: <b id="sigStatus">—</b></div>
+        <div class="stat">Source: <b id="sourceStatus">—</b></div>
+        <div class="stat">Role: <b id="roleStatus">—</b></div>
+      </div>
+      <div class="hint">Signed chunks are verified against the streamer npub before decoding or forwarding.</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { generateKeys, StreamerNode, ViewerNode, PROTO, verifyData, nip19 } from '/V5/p2p.js';
+
+/* ---------- DOM ---------- */
+const $ = id => document.getElementById(id);
+const tabs = { Identity: $('tabIdentity'), Stream: $('tabStream'), Watch: $('tabWatch') };
+const panels = { Identity: $('panelIdentity'), Stream: $('panelStream'), Watch: $('panelWatch') };
+function switchTab(name) {
+  for (const k in tabs) {
+    tabs[k].classList.toggle('active', k === name);
+    panels[k].classList.toggle('active', k === name);
+  }
+}
+for (const k in tabs) tabs[k].addEventListener('click', () => switchTab(k));
+
+/* ---------- Identity ---------- */
+let myKeys = null;
+$('genBtn').addEventListener('click', () => {
+  myKeys = generateKeys();
+  $('myNpub').textContent = myKeys.npub;
+});
+
+/* ---------- Streamer ---------- */
+let streamer = null;
+let localStream = null, processor = null, reader = null, encoder = null, encoderCfg = null;
+let lastConfigPacket = null;
+
+const camBtn = $('camBtn'), localVid = $('localVid'), camHint = $('camHint');
+const goLiveBtn = $('goLiveBtn'), stopStreamBtn = $('stopStreamBtn'), streamStatus = $('streamStatus');
+const directPeersEl = $('directPeers'), relayPeersEl = $('relayPeers'), directCountEl = $('directCount');
+
+function updateDirectPeers() {
+  if (!streamer || streamer.directPeers.size === 0) {
+    directPeersEl.innerHTML = '<div class="hint">No direct connections</div>';
+    directCountEl.textContent = '0';
+    return;
+  }
+  directCountEl.textContent = streamer.directPeers.size;
+  directPeersEl.innerHTML = '';
+  for (const [npub, peer] of streamer.directPeers) {
+    const row = document.createElement('div'); row.className = 'peer-row';
+    const state = peer.channel?.readyState || 'closed';
+    row.innerHTML = `<span class="npub">${npub.slice(0,20)}…${npub.slice(-6)}</span><span class="badge ${state}">${state}</span>`;
+    directPeersEl.appendChild(row);
+  }
+}
+function updateRelayPeers() {
+  if (!streamer || streamer.allRelays.size === 0) {
+    relayPeersEl.innerHTML = '<div class="hint">No relay nodes registered</div>';
+    return;
+  }
+  relayPeersEl.innerHTML = '';
+  for (const [npub, info] of streamer.allRelays) {
+    const row = document.createElement('div'); row.className = 'peer-row';
+    row.innerHTML = `<span class="npub">${npub.slice(0,20)}…${npub.slice(-6)}</span><span class="badge relay">relay</span><span class="badge open">${info.current}/${info.capacity}</span>`;
+    relayPeersEl.appendChild(row);
+  }
+}
+
+camBtn.addEventListener('click', async () => {
+  if (!myKeys) { myKeys = generateKeys(); $('myNpub').textContent = myKeys.npub; }
+  camBtn.disabled = true;
+  try {
+    if (typeof MediaStreamTrackProcessor === 'undefined') throw new Error('MediaStreamTrackProcessor not supported (Chrome/Edge required).');
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { exact: 640 }, height: { exact: 360 }, frameRate: { ideal: 30 } }, audio: false
+    });
+    localVid.srcObject = localStream;
+
+    const candidates = [
+      { codec: 'vp09.00.10.08', width: 640, height: 360, bitrate: 1_500_000, framerate: 30, latencyMode: 'realtime' },
+      { codec: 'vp8', width: 640, height: 360, bitrate: 1_500_000, framerate: 30, latencyMode: 'realtime' }
+    ];
+    let cfg = null;
+    for (const c of candidates) {
+      const t = new VideoEncoder({ output: ()=>{}, error: ()=>{} });
+      try { await t.configure(c); cfg = c; t.close(); break; } catch (_) { t.close(); }
+    }
+    if (!cfg) throw new Error('No VP9/VP8 support in this browser');
+
+    encoderCfg = cfg;
+    camHint.textContent = `Encoding: ${cfg.codec} @ 640×360`;
+
+    encoder = new VideoEncoder({
+      output: (chunk, metadata) => {
+        if (metadata?.decoderConfig) {
+          const cfg = { ...metadata.decoderConfig };
+          if (cfg.description instanceof Uint8Array) {
+            cfg.description = Array.from(cfg.description);
+          }
+          lastConfigPacket = PROTO.packConfig(cfg, myKeys.priv);
+          console.log('[Streamer] Config packet created', cfg.codec, cfg.description ? 'with description' : 'no description');
+          if (streamer) streamer.broadcast(lastConfigPacket);
+        }
+
+        if (!streamer) return;
+
+        const meta = { type: chunk.type, timestamp: chunk.timestamp, duration: chunk.duration || 0 };
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        const packet = PROTO.packChunk(meta, data, myKeys.priv);
+        streamer.broadcast(packet);
+      },
+      error: (e) => { console.error('Encoder error', e); stopStreaming(); }
+    });
+    await encoder.configure(cfg);
+
+    const track = localStream.getVideoTracks()[0];
+    processor = new MediaStreamTrackProcessor({ track });
+    reader = processor.readable.getReader();
+
+    let frameCount = 0;
+    const KEYFRAME_INTERVAL = 60;
+
+    (async () => {
+      try {
+        while (true) {
+          const { done, value: frame } = await reader.read();
+          if (done) break;
+          if (encoder?.state === 'configured') {
+            frameCount++;
+            const forceKey = encoder._forceKeyframeNext || (frameCount % KEYFRAME_INTERVAL === 0);
+            if (forceKey) {
+              try {
+                encoder.encode(frame, { keyFrame: true });
+                encoder._forceKeyframeNext = false;
+                console.log('[Streamer] Encoded forced keyframe');
+              } catch (e) {
+                console.warn('[Streamer] keyFrame option failed, falling back', e);
+                encoder.encode(frame);
+              }
+            } else {
+              encoder.encode(frame);
+            }
+          }
+          frame.close();
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.error(e);
+      }
+    })();
+  } catch (e) {
+    camHint.textContent = 'Error: ' + e.message;
+    console.error(e);
+    camBtn.disabled = false;
+  }
+});
+
+goLiveBtn.addEventListener('click', async () => {
+  if (!myKeys) { myKeys = generateKeys(); $('myNpub').textContent = myKeys.npub; }
+  if (!encoder) { alert('Start camera first'); return; }
+  goLiveBtn.disabled = true;
+  streamStatus.textContent = 'Starting Nostr listener…';
+
+streamer = new StreamerNode({
+    keys: myKeys,
+    onConnection: (pc, npub, dir) => { /* ... same ... */ },
+    onPeerDisconnect: (npub, reason) => { /* ... same ... */ },
+    onPeerOfferTimeout: (npub) => {
+        console.log('[Streamer] Offer timed out for', npub.slice(0,16));
+        updateDirectPeers();
+    },
+    onPeerRelayUpdate: (npub, cap, cur, reason) => updateRelayPeers(),
+    onKeyframeRequest: () => {
+      if (encoder && encoder.state === 'configured') {
+        encoder._forceKeyframeNext = true;
+        console.log('[Streamer] Keyframe requested by peer');
+      }
+    },
+    onConfigRequest: (npub) => {
+      if (lastConfigPacket) {
+        const peer = streamer.directPeers.get(npub);
+        if (peer?.channel?.readyState === 'open') {
+          peer.channel.send(lastConfigPacket);
+          console.log('[Streamer] Sent config on request to', npub.slice(0,16));
+        }
+      } else {
+        console.warn('[Streamer] Config requested but none available for', npub.slice(0,16));
+      }
+    },
+    onLog: (...a) => console.log('[Streamer]', ...a)
+  });
+
+  try {
+    await streamer.start();
+    stopStreamBtn.disabled = false;
+    streamStatus.textContent = `Live — ${myKeys.npub.slice(0,24)}…`;
+  } catch (e) {
+    streamStatus.textContent = 'Failed: ' + e.message;
+    goLiveBtn.disabled = false;
+  }
+});
+
+stopStreamBtn.addEventListener('click', stopStreaming);
+function stopStreaming() {
+  if (streamer) { streamer.stop(); streamer = null; }
+  if (reader) { reader.cancel().catch(()=>{}); }
+  if (encoder) { encoder.close(); encoder = null; }
+  if (localStream) { localStream.getTracks().forEach(t=>t.stop()); localStream = null; }
+  localVid.srcObject = null;
+  camHint.textContent = 'VP9/VP8 real-time encode. Each chunk is signed with your nsec.';
+  camBtn.disabled = false; goLiveBtn.disabled = false; stopStreamBtn.disabled = true;
+  streamStatus.textContent = 'Idle';
+  updateDirectPeers(); updateRelayPeers();
+}
+
+/* ---------- Viewer ---------- */
+let viewer = null, decoder = null, streamerPub = null;
+let hasConfig = false, hasKeyframe = false;
+
+const joinBtn = $('joinBtn'), leaveBtn = $('leaveBtn');
+const streamerNpubInput = $('streamerNpub'), relayCheck = $('relayCheck');
+const watchStatus = $('watchStatus'), upstreamInfo = $('upstreamInfo');
+const downPeersEl = $('downPeers'), downCountEl = $('downCount');
+const recvCanvas = $('recvCanvas');
+const sigStatus = $('sigStatus'), sourceStatus = $('sourceStatus'), roleStatus = $('roleStatus');
+
+function updateDownstreams() {
+  if (!viewer || viewer.downstreams.size === 0) {
+    downPeersEl.innerHTML = '<div class="hint">No downstream connections</div>';
+    downCountEl.textContent = '0';
+    return;
+  }
+  downCountEl.textContent = viewer.downstreams.size;
+  downPeersEl.innerHTML = '';
+  for (const [npub, peer] of viewer.downstreams) {
+    const row = document.createElement('div'); row.className = 'peer-row';
+    const state = peer.channel?.readyState || 'closed';
+    row.innerHTML = `<span class="npub">${npub.slice(0,20)}…${npub.slice(-6)}</span><span class="badge ${state}">${state}</span>`;
+    downPeersEl.appendChild(row);
+  }
+}
+
+function resetDecoderState() {
+  hasConfig = false;
+  hasKeyframe = false;
+  if (decoder) {
+    try { decoder.close(); } catch (_) {}
+    decoder = null;
+  }
+}
+
+joinBtn.addEventListener('click', async () => {
+  if (!myKeys) { myKeys = generateKeys(); $('myNpub').textContent = myKeys.npub; }
+  const target = streamerNpubInput.value.trim();
+  if (!target) return;
+  try { streamerPub = nip19.decode(target).data; }
+  catch { alert('Invalid streamer npub'); return; }
+
+  joinBtn.disabled = true;
+  watchStatus.textContent = 'Requesting admission…';
+  resetDecoderState();
+
+  viewer = new ViewerNode(target, {
+    keys: myKeys,
+    enableRelay: relayCheck.checked,
+    maxReconnectAttempts: 10,
+    reconnectBaseDelay: 2000,
+    onUpstreamData: (buf) => handleUpstreamData(buf),
+    onDownstreamConnection: (pc, npub) => {
+      watchStatus.textContent = `Relaying to ${viewer.downstreams.size} downstream(s)`;
+      updateDownstreams();
+    },
+    onConnectionStateChange: (state, npub, role) => {
+      if (state === 'connected') {
+        sourceStatus.textContent = npub.slice(0,16) + '…';
+        roleStatus.textContent = role;
+        watchStatus.textContent = role === 'streamer' ? 'Connected directly to streamer' : 'Connected via relay';
+        upstreamInfo.innerHTML = `<span class="mono">${npub}</span> <span class="badge open">${role}</span>`;
+        joinBtn.disabled = true;
+        leaveBtn.disabled = false;
+      } else if (state === 'reconnecting') {
+        watchStatus.textContent = 'Reconnecting…';
+        upstreamInfo.innerHTML = '<span class="badge reconnecting">reconnecting</span>';
+        resetDecoderState();
+      } else if (state === 'failed') {
+        watchStatus.textContent = 'Connection failed permanently';
+        upstreamInfo.innerHTML = '<span class="badge closed">failed</span>';
+        joinBtn.disabled = false;
+        leaveBtn.disabled = true;
+      } else {
+        watchStatus.textContent = 'Disconnected';
+        upstreamInfo.textContent = 'Not connected';
+        joinBtn.disabled = false;
+        leaveBtn.disabled = true;
+      }
+    },
+    onLog: (...a) => console.log('[Viewer]', ...a)
+  });
+
+  try {
+    await viewer.join();
+    leaveBtn.disabled = false;
+  } catch (e) {
+    watchStatus.textContent = 'Failed: ' + e.message;
+    joinBtn.disabled = false;
+  }
+});
+
+leaveBtn.addEventListener('click', () => {
+  if (viewer) { viewer.stop(); viewer = null; }
+  resetDecoderState();
+  recvCanvas.getContext('2d').clearRect(0, 0, recvCanvas.width, recvCanvas.height);
+  joinBtn.disabled = false; leaveBtn.disabled = true;
+  watchStatus.textContent = 'Idle'; upstreamInfo.textContent = 'Not connected';
+  updateDownstreams();
+  sigStatus.textContent = '—'; sourceStatus.textContent = '—'; roleStatus.textContent = '—';
+});
+
+function handleUpstreamData(buf) {
+  const msg = PROTO.unpack(buf);
+  const metaBytes = new TextEncoder().encode(JSON.stringify(msg.meta));
+  const toVerify = new Uint8Array(metaBytes.length + msg.data.length);
+  toVerify.set(metaBytes, 0);
+  toVerify.set(msg.data, metaBytes.length);
+
+  const valid = verifyData(streamerPub, msg.sig, toVerify);
+  sigStatus.textContent = valid ? '✓ Valid' : '✗ Invalid';
+  sigStatus.className = valid ? 'verify-ok' : 'verify-fail';
+  if (!valid) { console.warn('[Viewer] Invalid signature, dropping'); return; }
+
+  if (msg.type === 0x01) {
+    const cfg = msg.meta;
+    if (cfg.description && Array.isArray(cfg.description)) {
+      cfg.description = new Uint8Array(cfg.description);
+    }
+    console.log('[Viewer] Received decoderConfig', cfg.codec, cfg.codedWidth + 'x' + cfg.codedHeight, cfg.description ? 'with description' : 'no description');
+
+    if (decoder && (decoder._w !== cfg.codedWidth || decoder._h !== cfg.codedHeight)) {
+      decoder.close(); decoder = null; hasConfig = false; hasKeyframe = false;
+    }
+    if (!decoder) {
+      decoder = new VideoDecoder({
+        output: (frame) => {
+          if (recvCanvas.width !== frame.displayWidth) recvCanvas.width = frame.displayWidth;
+          if (recvCanvas.height !== frame.displayHeight) recvCanvas.height = frame.displayHeight;
+          recvCanvas.getContext('2d').drawImage(frame, 0, 0);
+          frame.close();
+        },
+        error: (e) => console.error('Decoder error', e)
+      });
+      decoder._w = cfg.codedWidth;
+      decoder._h = cfg.codedHeight;
+    }
+    try {
+      decoder.configure(cfg);
+      hasConfig = true;
+      console.log('[Viewer] Decoder configured successfully');
+    } catch (e) {
+      console.error('[Viewer] decoder.configure() FAILED:', e);
+      hasConfig = false;
+    }
+
+    if (viewer) viewer.sendToDownstreams(buf);
+
+  } else if (msg.type === 0x02) {
+    if (!hasConfig) {
+      console.log('[Viewer] Chunk arrived before config, dropping');
+      return;
+    }
+    if (msg.meta.type !== 'key' && !hasKeyframe) {
+      console.log('[Viewer] Delta frame before keyframe, dropping');
+      return;
+    }
+    if (msg.meta.type === 'key') {
+      if (!hasKeyframe) console.log('[Viewer] First keyframe received — decoding starts');
+      hasKeyframe = true;
+    }
+
+    const chunk = new EncodedVideoChunk({
+      type: msg.meta.type,
+      timestamp: msg.meta.timestamp,
+      duration: msg.meta.duration || 0,
+      data: msg.data
+    });
+    if (decoder) {
+      try {
+        decoder.decode(chunk);
+      } catch (e) {
+        console.error('[Viewer] decode() error:', e);
+      }
+    }
+    if (viewer) viewer.sendToDownstreams(buf);
+  }
+}
+</script>
+</body>
+</html>

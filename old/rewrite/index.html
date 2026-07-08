@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pidge Live</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widgets=resizes-content">
+  <link rel="icon" href="stream/icon.png">
+  <link rel="stylesheet" href="stream/style.css">
+</head>
+<body>
+<div class="container">
+  <header id="main-header">
+    <img src="stream/icon.png" style="height:100%;">
+    <div id="logo">Pidge Live</div>
+  </header>
+
+  <div id="app-body">
+    <div id="stream-area">
+      <div id="video-wrapper">
+        <video id="main-video" controls autoplay playsinline></video>
+        <div id="stream-overlay">
+          <div id="stream-info">
+            <h3 id="streamer-name">Offline</h3>
+            <span id="viewer-count">0 peers online</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="stream-meta">
+        <div id="stream-controls">
+            <button id="go-live-btn">Go Live</button>
+        </div>
+        <span id="user-info"></span>
+      </div>
+    </div>
+
+    <aside id="chat-area">
+      <div id="chat-header">Live Chat</div>
+      <div id="chat-messages"></div>
+      <div id="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Send a message..." maxlength="200">
+        <button id="chat-send-btn">Send</button>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<script type="module" src="stream/stream.js"></script>
+</body>
+</html>
