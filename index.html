@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pidge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widgets=resizes-content">
+  <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=10">
+</head>
+<body>
+<div class="container">
+  <header id="main-header">
+      <div class="header-left">
+        <img src="icon.png" style="height:100%;">
+        <div id="logo">Pidge</div>
+      </div>
+      <div class="header-right">
+        <span id="peer-status" title="Connected peers / known peers">0/0 peers</span>
+        <button id="header-settings-btn" title="Settings">⚙</button>
+      </div>
+  </header>
+  <main id="feed-area">
+    <div id="post-composer">
+      <div class="composer-avatar" id="composer-avatar"></div>
+      <div class="composer-body">
+        <div id="reply-bar" style="display:none;">
+          <span id="reply-bar-text"></span>
+          <button id="reply-cancel" title="Cancel reply">×</button>
+        </div>
+        <textarea id="post-text" placeholder="What's up?" maxlength="280"></textarea>
+        <div class="composer-actions">
+          <input type="text" id="post-image-url" placeholder="Image URL (optional)">
+          <button id="post-image-btn" title="Attach an image">📷</button>
+          <input type="file" id="post-image-file" accept="image/*" style="display:none;">
+          <button id="post-file-btn" title="Attach a file (max 1 MB)">📎</button>
+          <input type="file" id="post-file-file" style="display:none;">
+          <div class="composer-tools">
+            <span id="char-count">0/280</span>
+          </div>
+          <button id="post-button">Post</button>
+        </div>
+        <div id="image-preview-row" style="display:none;">
+          <img id="image-preview" alt="Attached image">
+          <button id="image-remove" title="Remove image">×</button>
+        </div>
+        <div id="file-chip-row" style="display:none;">
+          <span id="file-chip"></span>
+          <button id="file-remove" title="Remove file">×</button>
+        </div>
+      </div>
+    </div>
+    <div id="feed-filter-row">
+      <button class="filter-btn active" data-filter="following">Following</button>
+      <button class="filter-btn" data-filter="everything">Everything</button>
+    </div>
+    <div id="feed-content"></div>
+  </main>
+</div>
+
+<button id="settings-button" title="Settings">⚙</button>
+
+<!-- Settings modal -->
+<div class="modal" id="settings-modal">
+  <div class="modal-content">
+    <button class="close-modal" data-close="settings-modal">×</button>
+    <h2>Settings</h2>
+
+    <div style="margin:0.75rem 0;">
+      <strong>Your Pidge ID</strong>
+      <p id="user-id" style="word-break:break-all;font-size:0.85rem;"></p>
+      <div style="display:flex;gap:0.5rem;">
+        <button id="copy-id">Copy ID</button>
+        <button id="copy-link">Copy Invite Link</button>
+      </div>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Your Profile</h3>
+    <div class="profile-form">
+      <input type="text" id="profile-name" placeholder="Display Name" maxlength="40">
+      <div style="display:flex;gap:0.5rem;align-items:flex-start;">
+        <input type="text" id="profile-avatar" placeholder="Avatar Image URL" style="flex:1;">
+        <button id="avatar-upload-btn" title="Upload an image file" style="padding:0.3rem 0.7rem;flex-shrink:0;">📷</button>
+        <input type="file" id="avatar-file" accept="image/*" style="display:none;">
+      </div>
+      <div id="avatar-preview-row" style="display:none;">
+        <img id="avatar-preview" alt="Avatar preview">
+      </div>
+      <textarea id="profile-bio" placeholder="Bio" maxlength="160" style="height:60px;resize:none;"></textarea>
+      <button id="save-profile">Save Profile</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Your Peers</h3>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">
+      Your feed shows posts from you and these peers. Posts you like are shared with them.
+    </p>
+    <div class="add-friend-row">
+      <input type="text" id="add-friend-input" placeholder="Peer npub (npub1...)">
+      <button id="add-friend-btn">Add</button>
+    </div>
+    <ul id="friend-list"></ul>
+
+    <div id="invites-section" style="display:none;">
+      <hr style="margin:1rem 0;">
+      <h3>Pending Invites</h3>
+      <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">
+        These birds used your invite link. Add them back to connect.
+      </p>
+      <ul id="invite-list"></ul>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Identity</h3>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">
+      Your secret key (nsec) is stored only in this browser. Back it up before clearing site data.
+    </p>
+    <div class="profile-form">
+      <button id="show-nsec">Reveal Secret Key (nsec)</button>
+      <input type="password" id="nsec-display" readonly style="display:none;">
+      <input type="text" id="nsec-import" placeholder="Import nsec1... (replaces current identity)">
+      <button id="import-nsec-btn">Import Identity</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>Nostr Relays</h3>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">
+      Relays are only used to find peers and exchange WebRTC signals — posts travel peer-to-peer. One per line. Saving reloads the app.
+    </p>
+    <div class="profile-form">
+      <textarea id="relays-input" style="height:70px;resize:none;" placeholder="wss://relay.damus.io&#10;wss://nos.lol&#10;wss://relay.nostr.band"></textarea>
+      <button id="save-relays">Save Relays</button>
+    </div>
+
+    <hr style="margin:1rem 0;">
+    <h3>TURN Server</h3>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">
+      Optional. A TURN server relays the connection when peers can't reach each other directly
+      (restrictive NATs, firewalls, symmetric NAT). Without one, a public STUN server is used.
+      Leave empty to disable. Saving reloads the app.
+    </p>
+    <div class="profile-form">
+      <input type="text" id="turn-url" placeholder="turn:turn.example.com:3478">
+      <input type="text" id="turn-username" placeholder="Username (if required)">
+      <input type="password" id="turn-credential" placeholder="Credential / password (if required)">
+      <button id="save-turn">Save TURN Server</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile view modal -->
+<div class="modal" id="profile-modal">
+  <div class="modal-content">
+    <button class="close-modal" data-close="profile-modal">×</button>
+    <div style="display:flex;align-items:flex-start;margin-top:1rem;">
+      <div class="profile-avatar-large" id="profile-view-avatar"></div>
+      <div style="flex:1;">
+        <div id="profile-view-name" style="font-weight:700;"></div>
+        <div id="profile-view-handle" style="font-size:0.9rem;color:#666;"></div>
+        <div id="profile-view-bio" style="margin-top:0.25rem;"></div>
+      </div>
+    </div>
+    <p id="profile-view-npub" style="word-break:break-all;font-size:0.75rem;color:#666;margin-top:0.5rem;"></p>
+    <button id="profile-view-peer-btn" style="width:100%;padding:0.4rem 0.8rem;"></button>
+    <div id="profile-view-posts"></div>
+  </div>
+</div>
+
+<!-- Invite prompt modal -->
+<div class="modal" id="invite-modal">
+  <div class="modal-content">
+    <button class="close-modal" data-close="invite-modal">×</button>
+    <h3 style="margin-top:1rem;">New invite 🐦</h3>
+    <div style="display:flex;align-items:center;gap:0.5rem;margin:0.5rem 0;">
+      <div class="profile-avatar-large" id="invite-avatar" style="width:48px;height:48px;margin-right:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div id="invite-name" style="font-weight:700;"></div>
+        <div id="invite-bio" style="font-size:0.85rem;color:#555;word-break:break-word;"></div>
+      </div>
+    </div>
+    <p id="invite-text" style="margin:0.5rem 0;word-break:break-all;font-size:0.9rem;"></p>
+    <div style="display:flex;gap:0.5rem;">
+      <button id="invite-accept" style="flex:1;padding:0.4rem 0.8rem;">Add Peer</button>
+      <button id="invite-ignore" style="flex:1;padding:0.4rem 0.8rem;">Ignore</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Shown when another tab already runs this identity -->
+<div id="instance-overlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.97);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:1rem;text-align:center;padding:1rem;">
+  <div style="font-size:3rem;">🕊️</div>
+  <div style="font-weight:700;font-size:1.2rem;">Pidge is already open in another tab</div>
+  <div style="color:#555;max-width:34rem;">Two tabs with the same identity fight over the same peer connections, which breaks signaling. Use one tab at a time.</div>
+  <button id="takeover-btn" style="padding:0.5rem 1.2rem;">Use this tab instead</button>
+</div>
+
+<script>
+// Single-instance guard: two tabs share localStorage, so they share the
+// identity — and would both try to signal/connect as the same npub, which
+// corrupts handshakes and prevents reconnects. Only one tab may boot the app.
+(function () {
+    var bc = null;
+    try { bc = new BroadcastChannel('pidge-instance'); } catch (e) { /* unsupported: can't guard */ }
+    var tabId = Math.random().toString(36).slice(2);
+    var started = false, taken = false;
+
+    function startApp() {
+        started = true;
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = 'app.js?v=10';
+        document.body.appendChild(s);
+    }
+    if (!bc) { startApp(); return; }
+
+    bc.onmessage = function (e) {
+        var m = e.data || {};
+        if (m.tabId === tabId) return;
+        if (m.type === 'hello' && started) bc.postMessage({ type: 'taken', tabId: tabId });
+        else if (m.type === 'taken') taken = true;
+        else if (m.type === 'takeover' && started) location.reload();
+    };
+    bc.postMessage({ type: 'hello', tabId: tabId });
+
+    setTimeout(function () {
+        if (!taken) { startApp(); return; }
+        var overlay = document.getElementById('instance-overlay');
+        overlay.style.display = 'flex';
+        document.getElementById('takeover-btn').onclick = function () {
+            started = true;               // answer future hellos ourselves
+            bc.postMessage({ type: 'takeover', tabId: tabId }); // other tab reloads into the overlay
+            overlay.style.display = 'none';
+            setTimeout(startApp, 500);    // give the other tab a moment to let go
+        };
+    }, 400);
+})();
+</script>
+</body>
+</html>
