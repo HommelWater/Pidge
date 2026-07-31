@@ -1,6 +1,6 @@
-import { NostrP2P, signPayload } from 'lib/nostr-p2p.js?v=10';
-import { generateSecretKey, bytesToHex, hexToBytes, nip19, nip44, finalizeEvent, schnorr, sha256 } from 'lib/nostr-deps.js?v=10';
-import { openDB } from 'lib/idb.js?v=10';
+import { NostrP2P, signPayload } from './lib/nostr-p2p.js?v=10';
+import { generateSecretKey, bytesToHex, hexToBytes, nip19, nip44, finalizeEvent, schnorr, sha256 } from './lib/nostr-deps.js?v=10';
+import { openDB } from './lib/idb.js?v=10';
 
 // ---------------------------------------------------------------- utilities
 
