@@ -192,7 +192,7 @@ body {
     height: auto;
     object-fit: contain;
     display: block;
-    align-self: flex-start;  /* stop flex from stretching */
+    align-self: flex-start;
 }
 
 .post-actions { display: flex; gap: 2rem; margin-top: 0.25rem; }
